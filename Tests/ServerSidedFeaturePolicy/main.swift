@@ -18,23 +18,14 @@ for name in [
 }
 
 require(
-    !ServerSidedFeaturePolicy.shouldOverwriteResolvedConfiguration(
-        requested: true,
-        isSpotify91: true
-    ),
-    "Spotify 9.1.x must retain its live resolve configuration"
-)
-require(
     ServerSidedFeaturePolicy.shouldOverwriteResolvedConfiguration(
-        requested: true,
-        isSpotify91: false
+        requested: true
     ),
-    "explicit overwrite must remain available for compatible legacy builds"
+    "explicit overwrite must use the version-selected bundled configuration"
 )
 require(
     !ServerSidedFeaturePolicy.shouldOverwriteResolvedConfiguration(
-        requested: false,
-        isSpotify91: false
+        requested: false
     ),
     "disabled overwrite must retain the live configuration"
 )

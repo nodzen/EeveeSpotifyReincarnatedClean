@@ -30,10 +30,7 @@ struct ServerSidedFeaturePolicy {
         name: "premium_gated_start_jam_buttons_enabled"
     )
 
-    static func shouldOverwriteResolvedConfiguration(
-        requested: Bool,
-        isSpotify91: Bool
-    ) -> Bool {
-        requested && !isSpotify91
+    static func shouldOverwriteResolvedConfiguration(requested: Bool) -> Bool {
+        requested
     }
 }

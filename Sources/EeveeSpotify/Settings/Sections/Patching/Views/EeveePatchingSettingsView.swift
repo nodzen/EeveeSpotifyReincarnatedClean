@@ -40,18 +40,13 @@ struct EeveePatchingSettingsView: View {
             }
 
             if patchType == .requests {
-                if ServerSidedFeaturePolicy.shouldOverwriteResolvedConfiguration(
-                    requested: true,
-                    isSpotify91: EeveeSpotify.hookTarget == .v91
+                Section(
+                    footer: Text("overwrite_configuration_description".localized)
                 ) {
-                    Section(
-                        footer: Text("overwrite_configuration_description".localized)
-                    ) {
-                        Toggle(
-                            "overwrite_configuration".localized,
-                            isOn: $overwriteConfiguration
-                        )
-                    }
+                    Toggle(
+                        "overwrite_configuration".localized,
+                        isOn: $overwriteConfiguration
+                    )
                 }
 
                 Section(

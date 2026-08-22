@@ -83,6 +83,12 @@ jobs:
             Tests/ServerSidedFeaturePolicy/main.swift \
             -o "$RUNNER_TEMP/server-sided-feature-policy-tests"
           "$RUNNER_TEMP/server-sided-feature-policy-tests"
+          swiftc \
+            Sources/EeveeSpotify/Premium/Helpers/BundledConfigurationPolicy.swift \
+            Tests/BundledConfigurationPolicy/main.swift \
+            -o "$RUNNER_TEMP/bundled-configuration-policy-tests"
+          "$RUNNER_TEMP/bundled-configuration-policy-tests"
+          python3 Tests/ResolveConfigurationSnapshot/test.py
 
       - name: Build ${{ matrix.label }} .deb
         env:
@@ -160,6 +166,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: ${{ inputs.release_name != '' && inputs.release_name || inputs.tag }}
           draft: true
           prerelease: ${{ inputs.prerelease == 'true' }}

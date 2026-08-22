@@ -5,17 +5,13 @@ func modifyRemoteConfiguration(_ configuration: inout UcsResponse) {
     modifyAttributes(&configuration.attributes.accountAttributes)
 
     let overwriteRequested = UserDefaults.overwriteConfiguration
-    let isSpotify91 = EeveeSpotify.hookTarget == .v91
     if ServerSidedFeaturePolicy.shouldOverwriteResolvedConfiguration(
-        requested: overwriteRequested,
-        isSpotify91: isSpotify91
+        requested: overwriteRequested
     ) {
         configuration.resolve.configuration = try! BundleHelper.shared.resolveConfiguration()
-    } else if overwriteRequested && isSpotify91 {
-        writeDebugLog("[CONFIG] Ignored stale full-config overwrite on Spotify 9.1.x")
     }
 
-    // Apply targeted changes after an optional legacy full overwrite. Doing it
+    // Apply targeted changes after an optional full overwrite. Doing it
     // before replacement discarded every ad/upsell fix along with Spotify's
     // current feature assignments.
     modifyAssignedValues(&configuration.assignedValues)
