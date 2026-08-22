@@ -1,6 +1,11 @@
 import Foundation
 import UIKit
 
+private let liveMessagingAssignmentKeys = Set([
+    "ios-campfire-properties-impl.campfire_feature_enabled",
+    "ios-feature-sidedrawer-platform.is_list_page_enabled"
+])
+
 func modifyRemoteConfiguration(_ configuration: inout UcsResponse) {
     modifyAttributes(&configuration.attributes.accountAttributes)
 
@@ -8,7 +13,18 @@ func modifyRemoteConfiguration(_ configuration: inout UcsResponse) {
     if ServerSidedFeaturePolicy.shouldOverwriteResolvedConfiguration(
         requested: overwriteRequested
     ) {
+        // Messaging availability is assigned to the current account. A bundled
+        // Premium snapshot can otherwise hide the chat UI for a different cohort.
+        let liveMessagingAssignments = configuration.assignedValues.filter {
+            liveMessagingAssignmentKeys.contains("\($0.propertyID.scope).\($0.propertyID.name)")
+        }
+
         configuration.resolve.configuration = try! BundleHelper.shared.resolveConfiguration()
+
+        configuration.assignedValues.removeAll {
+            liveMessagingAssignmentKeys.contains("\($0.propertyID.scope).\($0.propertyID.name)")
+        }
+        configuration.assignedValues.append(contentsOf: liveMessagingAssignments)
     }
 
     // Apply targeted changes after an optional full overwrite. Doing it
