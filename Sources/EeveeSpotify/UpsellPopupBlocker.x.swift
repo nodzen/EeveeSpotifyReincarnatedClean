@@ -45,6 +45,14 @@ private func isUpsellText(_ text: String?) -> Bool {
     return upsellKeywords.contains { lower.contains($0) }
 }
 
+// PopUpHelper uses this title for Eevee's own status/error dialogs, including
+// the intentional server-sided download reminder. Those are never Spotify
+// Premium upsells and must remain visible even if their localized body happens
+// to contain one of the generic keywords above.
+private func isEeveePopupTitle(_ title: String?) -> Bool {
+    title == "EeveeSpotify"
+}
+
 private func markAsUpsell(_ object: AnyObject) {
     objc_setAssociatedObject(
         object,
@@ -92,10 +100,12 @@ class SPTEncorePopUpDialogModelHook: ClassHook<NSObject> {
             secondaryButtonTitle: secondaryButtonTitle
         )
 
-        if isUpsellText(title)
+        let containsUpsellText = isUpsellText(title)
             || isUpsellText(description)
             || isUpsellText(primaryButtonTitle)
-            || isUpsellText(secondaryButtonTitle) {
+            || isUpsellText(secondaryButtonTitle)
+
+        if !isEeveePopupTitle(title) && containsUpsellText {
             markAsUpsell(model)
         }
         return model
@@ -134,8 +144,13 @@ class SPTEncorePopUpPresenterHook: ClassHook<NSObject> {
                         kvcString($0, "descriptionText")
                      ?? kvcString($0, "body")
                      ?? kvcString($0, "subtitle")
-                    }
+                 }
                  ?? kvcString(popUp, "descriptionText") ?? kvcString(popUp, "body")
+
+        if isEeveePopupTitle(title) {
+            orig.presentPopUp(popUp)
+            return
+        }
 
         if isUpsellText(title) || isUpsellText(desc) {
             NSLog("[EeveeSpotify][UpsellBlock] Blocked popup — title=%@ desc=%@",

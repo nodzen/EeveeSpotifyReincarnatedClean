@@ -117,7 +117,9 @@ jobs:
             DownloadUpsellService \
             FreeHostedJamsUpsellServiceImpl \
             FreeUserSkipUpsellPageService \
-            FreeUserShuffleUpsellSheetPageService; do
+            FreeUserShuffleUpsellSheetPageService \
+            playlist_downloading_popup \
+            downloadToggledWithCurrentAvailability:addAction:removeAction:pageIdentifier:pageURI:interactionID:; do
             strings "$DYLIB_PATH" | grep -Fq "$marker" || {
               echo "Compiled banner blocker marker missing: $marker" >&2
               exit 1

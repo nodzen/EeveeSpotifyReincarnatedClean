@@ -58,6 +58,25 @@ struct IOS14And15PremiumPatchingGroup: HookGroup { }
 struct V91PremiumPatchingGroup: HookGroup { } // For Spotify 9.1.x versions
 struct LatestPremiumPatchingGroup: HookGroup { }
 
+// Spotify 9.1.x originally removed the offline helper, so this version family
+// skipped the reminder hook entirely. Newer 9.1 builds expose the modern helper
+// again. Activate only that hook when its exact Objective-C entry point exists.
+func activateV91ServerSidedReminderIfAvailable() {
+    let className = ContentOffliningUIHelperImplementationModernHook.targetName
+    let selector = Selector((
+        "downloadToggledWithCurrentAvailability:addAction:removeAction:pageIdentifier:pageURI:interactionID:"
+    ))
+
+    guard let cls = NSClassFromString(className),
+          class_getInstanceMethod(cls, selector) != nil else {
+        writeDebugLog("[INIT] Server-sided download reminder unavailable on this 9.1.x build")
+        return
+    }
+
+    LatestPremiumPatchingGroup().activate()
+    writeDebugLog("[INIT] Activated server-sided download reminder for 9.1.x")
+}
+
 func activatePremiumPatchingGroup() {
     BasePremiumPatchingGroup().activate()
     
@@ -357,6 +376,8 @@ struct EeveeSpotify: Tweak {
                 } else {
                     writeDebugLog("[INIT] Skipped PremiumUIHooksGroup (missing HUBViewModelBuilderImplementation/addJSONDictionary:)")
                 }
+
+                activateV91ServerSidedReminderIfAvailable()
             }
 
             let lyricsEnabled = UserDefaults.lyricsSource.isReplacingLyrics
