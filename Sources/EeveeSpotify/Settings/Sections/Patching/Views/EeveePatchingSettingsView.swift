@@ -39,7 +39,7 @@ struct EeveePatchingSettingsView: View {
                 UserDefaults.trueShuffleEnabled = isEnabled
             }
 
-            if patchType == .requests {
+            if patchType == .requests && EeveeSpotify.hookTarget != .v91 {
                 Section(
                     footer: Text("overwrite_configuration_description".localized)
                 ) {

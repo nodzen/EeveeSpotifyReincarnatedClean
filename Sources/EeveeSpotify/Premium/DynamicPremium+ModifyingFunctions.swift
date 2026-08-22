@@ -3,15 +3,22 @@ import UIKit
 
 func modifyRemoteConfiguration(_ configuration: inout UcsResponse) {
     modifyAttributes(&configuration.attributes.accountAttributes)
-    
-    // IMPORTANT:
-    // Always apply our assignedValues patching. Some accounts receive different remote configs,
-    // and using a static bundled resolve config alone can regress back to Free tier.
-    modifyAssignedValues(&configuration.assignedValues)
 
-    if UserDefaults.overwriteConfiguration {
+    let overwriteRequested = UserDefaults.overwriteConfiguration
+    let isSpotify91 = EeveeSpotify.hookTarget == .v91
+    if ServerSidedFeaturePolicy.shouldOverwriteResolvedConfiguration(
+        requested: overwriteRequested,
+        isSpotify91: isSpotify91
+    ) {
         configuration.resolve.configuration = try! BundleHelper.shared.resolveConfiguration()
+    } else if overwriteRequested && isSpotify91 {
+        writeDebugLog("[CONFIG] Ignored stale full-config overwrite on Spotify 9.1.x")
     }
+
+    // Apply targeted changes after an optional legacy full overwrite. Doing it
+    // before replacement discarded every ad/upsell fix along with Spotify's
+    // current feature assignments.
+    modifyAssignedValues(&configuration.assignedValues)
 }
 
 private let propertyReplacements = [
@@ -82,6 +89,11 @@ private let propertyReplacements = [
     EeveePropertyReplacement(name: "free_user_shuffle_upsell_sheet_enabled", scope: "ios-jam-freeusershuffleupsellsheetpage-impl", modification: .forceBool(false)),
     EeveePropertyReplacement(name: "free_user_skip_upsell_sheet_enabled", scope: "ios-jam-freeuserskipupsellpage-impl", modification: .forceBool(false)),
     EeveePropertyReplacement(name: "free_hosted_jams_upsell_enabled", scope: "ios-jam-freehostedjamsupsell-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(
+        name: ServerSidedFeaturePolicy.premiumGatedJamEntryPoint.name,
+        scope: ServerSidedFeaturePolicy.premiumGatedJamEntryPoint.scope,
+        modification: .forceBool(false)
+    ),
     EeveePropertyReplacement(name: "is_promo_cta_enabled", scope: "ios-reinventfree-contextualupsellpremiumpromo-impl", modification: .forceBool(false)),
     EeveePropertyReplacement(name: "show_time_cap_upsell_with_premium_badge", scope: "ios-reinventfree-contextualupsellpremiumpromo-impl", modification: .forceBool(false)),
     EeveePropertyReplacement(name: "enable_video_time_cap_upsell", scope: "ios-reinventfree-controllerui-impl", modification: .forceBool(false)),
@@ -403,6 +415,11 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
 }
 
 private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
+    let serverAuthoritativeAttributes = Dictionary(
+        uniqueKeysWithValues: ServerSidedFeaturePolicy.serverAuthoritativeAccountAttributes
+            .compactMap { name in attributes[name].map { (name, $0) } }
+    )
+
     let oneYearFromNow = Calendar.current.date(byAdding: .year, value: 1, to: Date())!
     
     let formatter = ISO8601DateFormatter()
@@ -456,10 +473,6 @@ private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
         $0.stringValue = "1"
     }
 
-    attributes["offline"] = AccountAttribute.with {
-        $0.boolValue = true // allow downloading
-    }
-
     attributes["on-demand"] = AccountAttribute.with {
         $0.boolValue = true
     }
@@ -482,14 +495,6 @@ private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
 
     attributes["shuffle-eligible"] = AccountAttribute.with {
         $0.boolValue = true
-    }
-
-    attributes["social-session"] = AccountAttribute.with {
-        $0.boolValue = true
-    }
-
-    attributes["social-session-free-tier"] = AccountAttribute.with {
-        $0.boolValue = false
     }
 
     attributes["streaming-rules"] = AccountAttribute.with {
@@ -523,20 +528,8 @@ private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
         $0.boolValue = false
     }
 
-    attributes["offline-backup"] = AccountAttribute.with {
-        $0.stringValue = "UNRESTRICTED"
-    }
-
-    attributes["lyrics-offline"] = AccountAttribute.with {
-        $0.boolValue = true
-    }
-
     attributes["mixing-tools"] = AccountAttribute.with {
         $0.stringValue = "EDIT"
-    }
-
-    attributes["jam-social-session"] = AccountAttribute.with {
-        $0.stringValue = "EXPANDED"
     }
 
     attributes["your-library-tags"] = AccountAttribute.with {
@@ -577,4 +570,14 @@ private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
         attributes.removeValue(forKey: "is-premium-eligible-v\(i)")
     }
     attributes.removeValue(forKey: "is-premium-eligible")
+
+    // Restore the real account entitlements after all client-side Premium
+    // mutations. Missing values remain missing instead of being synthesized.
+    for name in ServerSidedFeaturePolicy.serverAuthoritativeAccountAttributes {
+        if let original = serverAuthoritativeAttributes[name] {
+            attributes[name] = original
+        } else {
+            attributes.removeValue(forKey: name)
+        }
+    }
 }

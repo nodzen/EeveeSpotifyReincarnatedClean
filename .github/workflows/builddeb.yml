@@ -78,6 +78,11 @@ jobs:
             Tests/URLAdClassification/main.swift \
             -o "$RUNNER_TEMP/url-ad-classification-tests"
           "$RUNNER_TEMP/url-ad-classification-tests"
+          swiftc \
+            Sources/EeveeSpotify/Premium/Helpers/ServerSidedFeaturePolicy.swift \
+            Tests/ServerSidedFeaturePolicy/main.swift \
+            -o "$RUNNER_TEMP/server-sided-feature-policy-tests"
+          "$RUNNER_TEMP/server-sided-feature-policy-tests"
 
       - name: Build ${{ matrix.label }} .deb
         env:
@@ -118,6 +123,7 @@ jobs:
             FreeHostedJamsUpsellServiceImpl \
             FreeUserSkipUpsellPageService \
             FreeUserShuffleUpsellSheetPageService \
+            premium_gated_start_jam_buttons_enabled \
             playlist_downloading_popup \
             downloadToggledWithCurrentAvailability:addAction:removeAction:pageIdentifier:pageURI:interactionID:; do
             strings "$DYLIB_PATH" | grep -Fq "$marker" || {
