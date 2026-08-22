@@ -13,6 +13,10 @@ struct GeneralUpsellsServiceGroup: HookGroup {}
 struct PremiumUpsellServiceGroup: HookGroup {}
 struct ContextualPremiumPromoServiceGroup: HookGroup {}
 struct ReferralsUpsellCardServiceGroup: HookGroup {}
+struct DownloadUpsellServiceGroup: HookGroup {}
+struct FreeHostedJamsUpsellServiceGroup: HookGroup {}
+struct FreeUserSkipUpsellPageServiceGroup: HookGroup {}
+struct FreeUserShuffleUpsellPageServiceGroup: HookGroup {}
 struct SelfLoadingUpsellBannerViewGroup: HookGroup {}
 
 class GeneralUpsellsServiceKill: ClassHook<NSObject> {
@@ -57,8 +61,54 @@ class ReferralsUpsellCardServiceKill: ClassHook<NSObject> {
     }
 }
 
+// Download and Jam hosting are server-gated for free accounts. Suppress only
+// their client-side Premium prompts; this does not pretend to enable either
+// server feature and does not touch ordinary download/Jam status UI.
+class DownloadUpsellServiceKill: ClassHook<NSObject> {
+    typealias Group = DownloadUpsellServiceGroup
+    static let targetName = "_TtC31ReinventFree_DownloadUpsellImpl21DownloadUpsellService"
+
+    func load() {
+        upsellServiceLog("suppressed DownloadUpsellService.load")
+        return
+    }
+}
+
+class FreeHostedJamsUpsellServiceKill: ClassHook<NSObject> {
+    typealias Group = FreeHostedJamsUpsellServiceGroup
+    static let targetName =
+        "_TtC28Jam_FreeHostedJamsUpsellImpl31FreeHostedJamsUpsellServiceImpl"
+
+    func load() {
+        upsellServiceLog("suppressed FreeHostedJamsUpsellServiceImpl.load")
+        return
+    }
+}
+
+class FreeUserSkipUpsellPageServiceKill: ClassHook<NSObject> {
+    typealias Group = FreeUserSkipUpsellPageServiceGroup
+    static let targetName =
+        "_TtC30Jam_FreeUserSkipUpsellPageImpl29FreeUserSkipUpsellPageService"
+
+    func load() {
+        upsellServiceLog("suppressed FreeUserSkipUpsellPageService.load")
+        return
+    }
+}
+
+class FreeUserShuffleUpsellPageServiceKill: ClassHook<NSObject> {
+    typealias Group = FreeUserShuffleUpsellPageServiceGroup
+    static let targetName =
+        "_TtC38Jam_FreeUserShuffleUpsellSheetPageImpl37FreeUserShuffleUpsellSheetPageService"
+
+    func load() {
+        upsellServiceLog("suppressed FreeUserShuffleUpsellSheetPageService.load")
+        return
+    }
+}
+
 // Language-independent fallback for the reusable Premium banner UIView.
-// DSA notices, library status banners and download banners use other classes.
+// DSA notices, library status and ordinary download progress use other classes.
 class SelfLoadingUpsellBannerViewKill: ClassHook<UIView> {
     typealias Group = SelfLoadingUpsellBannerViewGroup
     static let targetName = "_TtC13Upsells_UIKit29SelfLoadingUpsellBannerUIView"
@@ -81,6 +131,10 @@ func activateUpsellServiceBlocker() {
         (PremiumUpsellServiceKill.targetName, "PremiumUpsellServiceImpl", { PremiumUpsellServiceGroup().activate() }),
         (ContextualPremiumPromoServiceKill.targetName, "ContextualPremiumPromoServiceImpl", { ContextualPremiumPromoServiceGroup().activate() }),
         (ReferralsUpsellCardServiceKill.targetName, "ReferralsUpsellCardElementService", { ReferralsUpsellCardServiceGroup().activate() }),
+        (DownloadUpsellServiceKill.targetName, "DownloadUpsellService", { DownloadUpsellServiceGroup().activate() }),
+        (FreeHostedJamsUpsellServiceKill.targetName, "FreeHostedJamsUpsellService", { FreeHostedJamsUpsellServiceGroup().activate() }),
+        (FreeUserSkipUpsellPageServiceKill.targetName, "FreeUserSkipUpsellPageService", { FreeUserSkipUpsellPageServiceGroup().activate() }),
+        (FreeUserShuffleUpsellPageServiceKill.targetName, "FreeUserShuffleUpsellSheetPageService", { FreeUserShuffleUpsellPageServiceGroup().activate() }),
     ]
 
     var activated = 0

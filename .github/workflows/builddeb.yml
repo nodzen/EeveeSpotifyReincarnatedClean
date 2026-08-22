@@ -113,7 +113,11 @@ jobs:
             AdsSponsoredContextNPBAttachmentServiceImpl \
             AdsSponsoredPlaylistHeaderServiceImpl \
             SelfLoadingUpsellBannerUIView \
-            ReferralsUpsellCardElementServiceImpl; do
+            ReferralsUpsellCardElementServiceImpl \
+            DownloadUpsellService \
+            FreeHostedJamsUpsellServiceImpl \
+            FreeUserSkipUpsellPageService \
+            FreeUserShuffleUpsellSheetPageService; do
             strings "$DYLIB_PATH" | grep -Fq "$marker" || {
               echo "Compiled banner blocker marker missing: $marker" >&2
               exit 1
