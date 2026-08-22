@@ -125,6 +125,7 @@ enum SpotifyResponsePatcher {
         }
         if url.isBootstrap {
             var msg = try BootstrapMessage(serializedBytes: buffer)
+            PremiumConfigurationDumper.captureIfEligible(msg.ucsResponse)
             UserDefaults.hasPatchedBootstrap = true
             if UserDefaults.patchType == .requests {
                 modifyRemoteConfiguration(&msg.ucsResponse)

@@ -98,6 +98,12 @@ download_local_playlist = "Загрузить локальный плейлис�
 
 could_not_share_popup = "Не удалось поделиться контентом в выбранный сервис или LiveContainer. URL скопирован.";
 
+/* MARK: Premium configuration dump */
+
+export_premium_config_dump = "Экспорт конфигурации Premium";
+premium_config_dump_saved = "Исходная конфигурация Premium сохранена. Откройте настройки EeveeSpotify и экспортируйте её из раздела «Отладка».";
+premium_config_dump_missing = "Конфигурация Premium ещё не получена. Войдите в настоящий Premium-аккаунт, оставьте патчинг Premium включённым и перезапустите Spotify.";
+
 /* MARK: Lyrics */
 
 fallback_attribute = "Проблема";

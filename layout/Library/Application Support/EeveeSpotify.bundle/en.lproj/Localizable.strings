@@ -159,6 +159,9 @@ payment_notice = "EeveeSpotify applies patches to unlock certain Premium feature
 // Debug
 
 debug_title = "Debug";
+export_premium_config_dump = "Export Premium Configuration Dump";
+premium_config_dump_saved = "The original Premium configuration was saved. Open EeveeSpotify Settings and export it from the Debug section.";
+premium_config_dump_missing = "No Premium configuration dump was found. Sign in to a real Premium account, keep Premium patching enabled, and restart Spotify.";
 export_debug_log = "Export Debug Log";
 clear_debug_log = "Clear Debug Log";
 debug_log_cleared = "Debug log cleared.";

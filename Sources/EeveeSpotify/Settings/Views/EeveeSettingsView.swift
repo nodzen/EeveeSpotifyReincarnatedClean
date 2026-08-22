@@ -146,6 +146,15 @@ struct EeveeSettingsView: View {
 
             Section(header: Text("debug_title".localized), footer: Text("debug_section_footer".localized)) {
                 Button {
+                    PremiumConfigurationDumper.shareDump()
+                } label: {
+                    HStack {
+                        Image(systemName: "doc.badge.arrow.up")
+                        Text("export_premium_config_dump".localized)
+                    }
+                }
+
+                Button {
                     let logPath = NSTemporaryDirectory() + "eeveespotify_debug.log"
                     guard FileManager.default.fileExists(atPath: logPath),
                           let logData = FileManager.default.contents(atPath: logPath),

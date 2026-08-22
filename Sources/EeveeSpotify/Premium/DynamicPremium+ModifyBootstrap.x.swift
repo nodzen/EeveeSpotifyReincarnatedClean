@@ -67,6 +67,7 @@ class SpotifySessionDelegateBootstrapHook: ClassHook<NSObject>, SpotifySessionDe
             
             do {
                 var bootstrapMessage = try BootstrapMessage(serializedBytes: buffer)
+                PremiumConfigurationDumper.captureIfEligible(bootstrapMessage.ucsResponse)
                 
                 if UserDefaults.patchType == .notSet {
                     if bootstrapMessage.attributes["type"]?.stringValue == "premium" {

@@ -83,6 +83,11 @@ jobs:
             Tests/ServerSidedFeaturePolicy/main.swift \
             -o "$RUNNER_TEMP/server-sided-feature-policy-tests"
           "$RUNNER_TEMP/server-sided-feature-policy-tests"
+          swiftc \
+            Sources/EeveeSpotify/Premium/Helpers/PremiumConfigurationDumpPolicy.swift \
+            Tests/PremiumConfigurationDumpPolicy/main.swift \
+            -o "$RUNNER_TEMP/premium-configuration-dump-policy-tests"
+          "$RUNNER_TEMP/premium-configuration-dump-policy-tests"
 
       - name: Build ${{ matrix.label }} .deb
         env:
