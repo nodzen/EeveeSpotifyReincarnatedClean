@@ -39,14 +39,19 @@ struct EeveePatchingSettingsView: View {
                 UserDefaults.trueShuffleEnabled = isEnabled
             }
 
-            if patchType == .requests && EeveeSpotify.hookTarget != .v91 {
-                Section(
-                    footer: Text("overwrite_configuration_description".localized)
+            if patchType == .requests {
+                if ServerSidedFeaturePolicy.shouldOverwriteResolvedConfiguration(
+                    requested: true,
+                    isSpotify91: EeveeSpotify.hookTarget == .v91
                 ) {
-                    Toggle(
-                        "overwrite_configuration".localized,
-                        isOn: $overwriteConfiguration
-                    )
+                    Section(
+                        footer: Text("overwrite_configuration_description".localized)
+                    ) {
+                        Toggle(
+                            "overwrite_configuration".localized,
+                            isOn: $overwriteConfiguration
+                        )
+                    }
                 }
 
                 Section(
