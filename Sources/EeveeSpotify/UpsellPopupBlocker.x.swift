@@ -3,8 +3,13 @@
 
 import Orion
 import UIKit
+import ObjectiveC.runtime
 
+struct UpsellPopupModelCaptureGroup: HookGroup {}
+struct UpsellPopupDialogCaptureGroup: HookGroup {}
 struct UpsellPopupBlockerGroup: HookGroup {}
+
+private var upsellPopupAssociationKey: UInt8 = 0
 
 private let upsellKeywords: [String] = [
     "premium",
@@ -26,12 +31,31 @@ private let upsellKeywords: [String] = [
     "paywall",
     "free tier",
     "limited listening",
+    // Russian UI variants used by the same Encore popup model.
+    "премиум",
+    "оформить подписку",
+    "купить подписку",
+    "без ограничений",
+    "бесплатный аккаунт",
 ]
 
 private func isUpsellText(_ text: String?) -> Bool {
     guard let text = text else { return false }
     let lower = text.lowercased()
     return upsellKeywords.contains { lower.contains($0) }
+}
+
+private func markAsUpsell(_ object: AnyObject) {
+    objc_setAssociatedObject(
+        object,
+        &upsellPopupAssociationKey,
+        NSNumber(value: true),
+        .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+    )
+}
+
+private func isMarkedAsUpsell(_ object: AnyObject) -> Bool {
+    (objc_getAssociatedObject(object, &upsellPopupAssociationKey) as? NSNumber)?.boolValue == true
 }
 
 // responds(to:) gate is mandatory: value(forKey:) raises an uncatchable
@@ -46,11 +70,60 @@ private func kvcObject(_ obj: NSObject, _ key: String) -> NSObject? {
     return obj.value(forKey: key) as? NSObject
 }
 
+// Capture the strings at their source. The dialog passed to presentPopUp(_:) does
+// not expose its model in all Spotify builds, which made the previous KVC-only
+// implementation see nil title/body and allow the popup through.
+class SPTEncorePopUpDialogModelHook: ClassHook<NSObject> {
+    typealias Group = UpsellPopupModelCaptureGroup
+    static let targetName = "SPTEncorePopUpDialogModel"
+
+    func initWithTitle(
+        _ title: String,
+        description: String,
+        image: Any?,
+        primaryButtonTitle: String,
+        secondaryButtonTitle: String?
+    ) -> Target {
+        let model = orig.initWithTitle(
+            title,
+            description: description,
+            image: image,
+            primaryButtonTitle: primaryButtonTitle,
+            secondaryButtonTitle: secondaryButtonTitle
+        )
+
+        if isUpsellText(title)
+            || isUpsellText(description)
+            || isUpsellText(primaryButtonTitle)
+            || isUpsellText(secondaryButtonTitle) {
+            markAsUpsell(model)
+        }
+        return model
+    }
+}
+
+class SPTEncorePopUpDialogHook: ClassHook<NSObject> {
+    typealias Group = UpsellPopupDialogCaptureGroup
+    static let targetName = "SPTEncorePopUpDialog"
+
+    func update(_ popUpModel: NSObject) {
+        if isMarkedAsUpsell(popUpModel) {
+            markAsUpsell(target)
+        }
+        orig.update(popUpModel)
+    }
+}
+
 class SPTEncorePopUpPresenterHook: ClassHook<NSObject> {
     typealias Group = UpsellPopupBlockerGroup
     static let targetName = "SPTEncorePopUpPresenter"
 
     func presentPopUp(_ popUp: NSObject) {
+        if isMarkedAsUpsell(popUp) {
+            NSLog("[EeveeSpotify][UpsellBlock] Blocked popup captured from model")
+            return
+        }
+
         // dialog exposes a `model` with title/descriptionText; fall back to the
         // dialog itself in case the structure differs between builds
         let modelObj = kvcObject(popUp, "model")
@@ -75,10 +148,39 @@ class SPTEncorePopUpPresenterHook: ClassHook<NSObject> {
 }
 
 func activateUpsellPopupBlocker() {
-    guard NSClassFromString("SPTEncorePopUpPresenter") != nil else {
-        NSLog("[EeveeSpotify][UpsellBlock] SPTEncorePopUpPresenter not found; skipping")
-        return
+    let targets: [(String, [Selector], String, () -> Void)] = [
+        (
+            SPTEncorePopUpDialogModelHook.targetName,
+            [Selector(("initWithTitle:description:image:primaryButtonTitle:secondaryButtonTitle:"))],
+            "dialog model capture",
+            { UpsellPopupModelCaptureGroup().activate() }
+        ),
+        (
+            SPTEncorePopUpDialogHook.targetName,
+            [Selector(("update:"))],
+            "dialog marker propagation",
+            { UpsellPopupDialogCaptureGroup().activate() }
+        ),
+        (
+            SPTEncorePopUpPresenterHook.targetName,
+            [Selector(("presentPopUp:"))],
+            "popup presenter",
+            { UpsellPopupBlockerGroup().activate() }
+        ),
+    ]
+
+    var activated = 0
+    for (className, selectors, label, activate) in targets {
+        guard let cls = NSClassFromString(className),
+              selectors.allSatisfy({ class_getInstanceMethod(cls, $0) != nil }) else {
+            NSLog("[EeveeSpotify][UpsellBlock] %@ unavailable; skipping", label)
+            continue
+        }
+        activate()
+        activated += 1
+        NSLog("[EeveeSpotify][UpsellBlock] %@ activated", label)
     }
-    UpsellPopupBlockerGroup().activate()
-    NSLog("[EeveeSpotify][UpsellBlock] UpsellPopupBlockerGroup activated")
+
+    NSLog("[EeveeSpotify][UpsellBlock] activated %d/%d compatible hooks",
+          activated, targets.count)
 }

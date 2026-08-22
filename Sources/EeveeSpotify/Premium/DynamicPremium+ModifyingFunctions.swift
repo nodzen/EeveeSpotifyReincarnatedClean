@@ -72,6 +72,24 @@ private let propertyReplacements = [
     EeveePropertyReplacement(name: "enable_home_sponsored_ad", modification: .setBool(false)),
     EeveePropertyReplacement(name: "enable_home_sponsored_ads", modification: .setBool(false)),
     EeveePropertyReplacement(name: "enable_home_upsell", modification: .setBool(false)),
+
+    // Spotify 9.1.66+ moved the most visible free-tier prompts into dedicated
+    // Swift services. Seed these scoped values even when the account's UCS
+    // response omits them; setBool-only replacements cannot do that.
+    EeveePropertyReplacement(name: "is_enabled_pt2", scope: "ios-feature-shuffletoggleupsell", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "linear_upsell_new_style_experiment_enabled", scope: "ios-feature-shuffletoggleupsell", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "play_modes_upsell_new_style_experiment_enabled", scope: "ios-feature-shuffletoggleupsell", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "free_user_shuffle_upsell_sheet_enabled", scope: "ios-jam-freeusershuffleupsellsheetpage-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "free_user_skip_upsell_sheet_enabled", scope: "ios-jam-freeuserskipupsellpage-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "free_hosted_jams_upsell_enabled", scope: "ios-jam-freehostedjamsupsell-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "is_promo_cta_enabled", scope: "ios-reinventfree-contextualupsellpremiumpromo-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "show_time_cap_upsell_with_premium_badge", scope: "ios-reinventfree-contextualupsellpremiumpromo-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "enable_video_time_cap_upsell", scope: "ios-reinventfree-controllerui-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "enable_video_time_cap_upsell_on_search", scope: "ios-reinventfree-controllerui-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "music_video_upsell_enabled", scope: "ios-reinventfree-timecappivot-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "is_gbb_upsell_enabled", scope: "ios-settings-mediaqualitypageplugin-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "should_show_pigeon_upsell", scope: "ios-settings-mediaqualitypageplugin-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "preview_ended_upsell_enabled", scope: "ios-system-listeningparties", modification: .forceBool(false)),
     EeveePropertyReplacement(name: "enable_now_playing_ad", modification: .setBool(false)),
     EeveePropertyReplacement(name: "enable_now_playing_ads", modification: .setBool(false)),
     EeveePropertyReplacement(name: "enable_now_playing_banner_ad", modification: .setBool(false)),
@@ -212,6 +230,18 @@ private let propertyReplacements = [
     // Modern RemoteConfig scope for Leave Behind ads (confirmed in binary as 'ios-feature-leavebehindadsbase').
     EeveePropertyReplacement(scope: "ios-feature-leavebehindadsbase", modification: .remove),
 
+    // Unified leave-behind cards are delivered into the Now Playing scroll
+    // independently of the older EmbeddedNPV switches. These are the flags
+    // used by Spotify 9.1.76 for the ad shown in issue #104.
+    EeveePropertyReplacement(name: "unified_leavebehind_npv_scroll_music_enabled", scope: "ios-nowplaying-scroll-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "unified_leavebehind_npv_scroll_podcast_enabled", scope: "ios-nowplaying-scroll-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "use_unified_leavebehind_fetch", scope: "ios-feature-embeddedplaylist", modification: .forceBool(false)),
+
+    // Keep the older EmbeddedNPV renderer dormant as a second line of defence.
+    EeveePropertyReplacement(name: "foreground_enabled", scope: "ios-adsnowplaying-embeddednpv-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "music_track_change_enabled", scope: "ios-adsnowplaying-embeddednpv-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "enable_ads_on_podcast", scope: "ios-adsnowplaying-embeddednpv-impl", modification: .forceBool(false)),
+
     // ─────────────────────────────────────────────────────────────────────
     // In-stream / audio / video stream ads
     // ─────────────────────────────────────────────────────────────────────
@@ -243,7 +273,7 @@ private let propertyReplacements = [
     // ─────────────────────────────────────────────────────────────────────
     // Now Playing video ads
     // ─────────────────────────────────────────────────────────────────────
-    EeveePropertyReplacement(name: "embedded_npv_video_show_with_canvas", scope: "ios-feature-adsnowplayingui", modification: .setBool(false)),
+    EeveePropertyReplacement(name: "embedded_npv_video_show_with_canvas", scope: "ios-feature-adsnowplayingui", modification: .forceBool(false)),
 
     // ─────────────────────────────────────────────────────────────────────
     // Sponsored context (sponsored playlists in Now Playing bar)

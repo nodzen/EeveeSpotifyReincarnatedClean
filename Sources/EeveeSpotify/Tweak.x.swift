@@ -249,8 +249,15 @@ struct EeveeSpotify: Tweak {
         // Otherwise Spotify can get stuck on splash because bootstrap is cancelled.
         UserDefaults.hasPatchedBootstrap = false
 
-        // Local-only premium force. Activated FIRST and unconditionally, before
-        // any version gating or kill-switch. Independent of patchType / bootstrap
+        // Recovery path for private-class changes: this must run before every
+        // manual hook activation, including ad and Premium banner blockers.
+        if eeveeEnvFlag("EEVEE_DISABLE_ALL") {
+            eeveeBreadcrumb("EEVEE_DISABLE_ALL=1 -> returning without hooks")
+            return
+        }
+
+        // Local-only premium force. Activated first after the recovery kill-switch,
+        // before version gating. Independent of patchType / bootstrap
         // patching / network interception. Keeps premium UI/state even if every
         // other Eevee path is disabled.
         activateEeveePremiumForce()
@@ -263,6 +270,10 @@ struct EeveeSpotify: Tweak {
         // Block premium upsell / "Like listening without limits?" popups.
         activateUpsellPopupBlocker()
 
+        // Block the newer Swift service-backed Premium sheets/cards used by
+        // Spotify 9.1.x. Each target is runtime-gated for minor-version safety.
+        activateUpsellServiceBlocker()
+
         // Block upsell components injected into Hub/home JSON (e.g. upgrade banners).
         if NSClassFromString("HUBViewModelBuilderImplementation") != nil {
             AdBlockerGroup().activate()
@@ -270,13 +281,6 @@ struct EeveeSpotify: Tweak {
         }
 
         // activateEeveeFlexGesture()
-
-        // Global kill-switch for debugging “instant crash / no logs”.
-        // If setting this makes Spotify launch, the crash is definitely in one of our hook activations.
-        if eeveeEnvFlag("EEVEE_DISABLE_ALL") {
-            eeveeBreadcrumb("EEVEE_DISABLE_ALL=1 -> returning without hooks")
-            return
-        }
 
         // Clean Share Links: swizzle the concrete class of UIPasteboard.general in
         // addition to the ClassHook<UIPasteboard> hooks — the general pasteboard is a
