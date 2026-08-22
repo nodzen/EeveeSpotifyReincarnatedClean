@@ -412,6 +412,20 @@ struct EeveeSpotify: Tweak {
                     writeDebugLog("[INIT] Skipped V91LyricsGroup (NPVScrollViewController missing)")
                 }
 
+                let playerTrackMetadataOK: Bool = {
+                    guard let cls = NSClassFromString(SPTPlayerTrackV91LyricsAvailabilityHook.targetName) else {
+                        return false
+                    }
+                    return class_getInstanceMethod(cls, Selector(("metadata"))) != nil
+                }()
+
+                if playerTrackMetadataOK {
+                    V91LyricsAvailabilityGroup().activate()
+                    writeDebugLog("[INIT] Activated 9.1.x lyrics availability metadata hook")
+                } else {
+                    writeDebugLog("[INIT] Skipped 9.1.x lyrics availability hook (SPTPlayerTrack/metadata missing)")
+                }
+
             }
 
             // Settings integration (guarded)

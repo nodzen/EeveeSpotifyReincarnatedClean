@@ -263,6 +263,21 @@ class LrclibLyricsRepository: LyricsRepository {
         }
     }
 
+    private func splitLyricsLines(_ lyrics: String) -> [String] {
+        var lines = lyrics.components(separatedBy: "\n").map { line in
+            line.hasSuffix("\r") ? String(line.dropLast()) : line
+        }
+
+        // components(separatedBy:) adds an empty element only when the response
+        // actually ends in a newline. LRCLIB responses commonly do not, so an
+        // unconditional dropLast() removes a real lyric line.
+        if lines.last?.isEmpty == true {
+            lines.removeLast()
+        }
+
+        return lines
+    }
+
     func getLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {
         let song: LrclibSong
 
@@ -286,23 +301,30 @@ class LrclibLyricsRepository: LyricsRepository {
         }
 
         if let syncedLyrics = song.syncedLyrics, !syncedLyrics.isEmpty {
-            let lines = Array(syncedLyrics.components(separatedBy: "\n").dropLast())
-            return LyricsDto(
-                lines: mapSyncedLyricsLines(lines),
-                timeSynced: true,
-                romanization: lines.canBeRomanized ? .canBeRomanized : .original
-            )
+            let lines = splitLyricsLines(syncedLyrics)
+            let mappedLines = mapSyncedLyricsLines(lines)
+            if !mappedLines.isEmpty {
+                writeDebugLog("[LRCLIB] Loaded \(mappedLines.count) synced lines for \(query.spotifyTrackId)")
+                return LyricsDto(
+                    lines: mappedLines,
+                    timeSynced: true,
+                    romanization: lines.canBeRomanized ? .canBeRomanized : .original
+                )
+            }
         }
         
         guard let plainLyrics = song.plainLyrics, !plainLyrics.isEmpty else {
-            return LyricsDto(
-                lines: [],
-                timeSynced: false,
-                romanization: .original
-            )
+            writeDebugLog("[LRCLIB] No usable lyrics for \(query.spotifyTrackId); allowing configured fallback")
+            throw LyricsError.noSuchSong
         }
         
-        let lines = Array(plainLyrics.components(separatedBy: "\n").dropLast())
+        let lines = splitLyricsLines(plainLyrics)
+        guard !lines.isEmpty else {
+            writeDebugLog("[LRCLIB] Empty plain lyrics for \(query.spotifyTrackId); allowing configured fallback")
+            throw LyricsError.noSuchSong
+        }
+
+        writeDebugLog("[LRCLIB] Loaded \(lines.count) plain lines for \(query.spotifyTrackId)")
         
         return LyricsDto(
             lines: lines.map { content in LyricsLineDto(content: content) },
