@@ -147,11 +147,17 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 return
             }
 
-            SpotifyResponsePatcher.markSyntheticLyricsTask(task)
-            orig.URLSession(session, dataTask: task, didReceiveResponse: ok, completionHandler: handler)
-            orig.URLSession(session, dataTask: task, didReceiveData: lyricsData)
-            // The real URLSession callback supplies the only completion. Its
-            // original error body is discarded by consumeSyntheticLyricsTask.
+            // The fetch above finishes on our global queue, but Spotify's new
+            // lyrics UI keeps main-actor state. Deliver the replacement on the
+            // main queue just like SPTDataLoaderServiceHook does; otherwise one
+            // lyrics surface may parse the body while the NPV card never updates.
+            DispatchQueue.main.async { [self] in
+                SpotifyResponsePatcher.markSyntheticLyricsTask(task)
+                orig.URLSession(session, dataTask: task, didReceiveResponse: ok, completionHandler: handler)
+                orig.URLSession(session, dataTask: task, didReceiveData: lyricsData)
+                // The real URLSession callback supplies the only completion. Its
+                // original error body is discarded by consumeSyntheticLyricsTask.
+            }
         }
     }
 
