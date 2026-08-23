@@ -366,11 +366,7 @@ private let propertyReplacements = [
     // 😡😡😡 spotify, stop changing the scroll logic
     EeveePropertyReplacement(name: "should_nova_scroll_use_scrollsita", modification: .remove),
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Lyrics share button — Spotify gates this behind a remote-config flag
-    // that is only enabled for premium accounts. Force it on so the share
-    // button works even when overwrite-configuration is disabled.
-    // ─────────────────────────────────────────────────────────────────────
+    EeveePropertyReplacement(name: "lyrics_entry_point_enabled", scope: "ios-feature-lyrics", modification: .forceBool(true)),
     EeveePropertyReplacement(name: "enable_lyrics_share", scope: "ios-feature-lyrics", modification: .forceBool(true)),
     EeveePropertyReplacement(name: "lyrics_share_enabled", scope: "ios-feature-lyrics", modification: .forceBool(true)),
     EeveePropertyReplacement(name: "enable_lyrics_sharing", scope: "ios-feature-lyrics", modification: .forceBool(true)),
