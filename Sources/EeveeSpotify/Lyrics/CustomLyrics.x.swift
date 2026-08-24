@@ -7,6 +7,7 @@ struct BaseLyricsGroup: HookGroup { }
 struct LegacyLyricsGroup: HookGroup { }
 struct ModernLyricsGroup: HookGroup { }
 struct V91LyricsGroup: HookGroup { }            // 9.1.x-safe subset
+struct V91LyricsAvailabilityGroup: HookGroup { } // SPTPlayerTrack metadata only
 struct LyricsErrorHandlingGroup: HookGroup { }  // not activated on 9.1.x
 
 var lyricsState = LyricsLoadingState()
@@ -164,8 +165,15 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
             && !(currentTitle ?? "").isEmpty
             && !(currentArtist ?? "").isEmpty
         if canFallbackToGenius {
+            writeDebugLog("[Lyrics] Primary source failed for \(trackId); trying Genius fallback")
             source = .genius
-            lyricsDto = try geniusLyricsRepository.getLyrics(searchQuery, options: options)
+            do {
+                lyricsDto = try geniusLyricsRepository.getLyrics(searchQuery, options: options)
+                writeDebugLog("[Lyrics] Genius fallback loaded \(lyricsDto.lines.count) lines for \(trackId)")
+            } catch {
+                writeDebugLog("[Lyrics] Genius fallback failed for \(trackId): \(error)")
+                throw error
+            }
         } else {
             throw error
         }

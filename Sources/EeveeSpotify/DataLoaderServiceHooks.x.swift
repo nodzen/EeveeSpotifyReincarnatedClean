@@ -49,6 +49,13 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             return
         }
 
+        if SpotifyResponsePatcher.consumeSyntheticLyricsTask(task) {
+            URLSessionHelper.shared.discardData(for: task)
+            writeDebugLog("[DL] Completed synthetic lyrics response (taskId=\(task.taskIdentifier))")
+            orig.URLSession(session, task: task, didCompleteWithError: nil)
+            return
+        }
+
         guard error == nil, SpotifyResponsePatcher.shouldModify(url) else {
             orig.URLSession(session, task: task, didCompleteWithError: error)
             return
@@ -154,6 +161,8 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             return
         }
 
+        writeDebugLog("[DL] Replacing lyrics HTTP \(response.statusCode) (taskId=\(task.taskIdentifier))")
+
         DispatchQueue.global(qos: .userInitiated).async { [self] in
             let data = try? getLyricsDataForCurrentTrack(url.path)
 
@@ -166,9 +175,11 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             }
 
             DispatchQueue.main.async { [self] in
+                SpotifyResponsePatcher.markSyntheticLyricsTask(task)
                 orig.URLSession(session, dataTask: task, didReceiveResponse: ok, completionHandler: handler)
                 orig.URLSession(session, dataTask: task, didReceiveData: lyricsData)
-                orig.URLSession(session, task: task, didCompleteWithError: nil)
+                // Do not synthesize completion here; the real URLSession
+                // callback completes this replacement exactly once.
             }
         }
     }

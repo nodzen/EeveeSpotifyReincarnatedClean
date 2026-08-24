@@ -10,6 +10,7 @@ enum SpotifyResponsePatcher {
     private static let lock = NSLock()
     private static var _cachedCustomizeData: Data?
     private static var _handledCustomizeTasks = Set<Int>()
+    private static let syntheticLyricsTasks = SyntheticLyricsTaskTracker()
 
     static var cachedCustomizeData: Data? {
         get { lock.lock(); defer { lock.unlock() }; return _cachedCustomizeData }
@@ -25,6 +26,14 @@ enum SpotifyResponsePatcher {
     static func consumeCustomizeTask(_ id: Int) -> Bool {
         lock.lock(); defer { lock.unlock() }
         return _handledCustomizeTasks.remove(id) != nil
+    }
+
+    static func markSyntheticLyricsTask(_ task: URLSessionTask) {
+        syntheticLyricsTasks.mark(task)
+    }
+
+    static func consumeSyntheticLyricsTask(_ task: URLSessionTask) -> Bool {
+        syntheticLyricsTasks.consume(task)
     }
 
     static func shouldBlock(_ url: URL) -> Bool {

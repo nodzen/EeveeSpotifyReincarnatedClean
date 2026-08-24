@@ -3,7 +3,22 @@ import UIKit
 
 private var shouldOverrideLocalTrackURI = false
 
-// SPTPlayerTrack metadata hooks not compatible with 9.1.x
+// Spotify decides whether to create the /color-lyrics request from this
+// metadata flag. Keep the 9.1.x hook isolated from the older error-handling
+// group: that group also contains private APIs which no longer exist on 9.1.x.
+class SPTPlayerTrackV91LyricsAvailabilityHook: ClassHook<NSObject> {
+    typealias Group = V91LyricsAvailabilityGroup
+    static let targetName = "SPTPlayerTrack"
+
+    func metadata() -> [String: String] {
+        var meta = orig.metadata()
+        meta["has_lyrics"] = "true"
+        return meta
+    }
+}
+
+// Legacy combined metadata/URI behavior. Do not activate its entire group on
+// 9.1.x; the isolated metadata-only hook above is the compatible subset.
 class SPTPlayerTrackHook: ClassHook<NSObject> {
     typealias Group = LyricsErrorHandlingGroup  // Not activated for 9.1.x
     static let targetName = EeveeSpotify.hookTarget == .latest
