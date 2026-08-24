@@ -1,9 +1,12 @@
 ![Banner](Images/banner.png?)
 
-# EeveeSpotifyReincarnated
+# EeveeSpotifyReincarnated Clean
 
-**Maintainers:** [jaydenjcpy](https://github.com/jaydenjcpy) & [faroukbmiled](https://github.com/faroukbmiled) & [Mod4](https://github.com/M0d-4) <br />
-**Last Update:** `8/19/26` **Spotify Version:** `9.1.74`
+**Maintainer:** [Nodzen](https://github.com/nodzen) <br />
+**Based on:** [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) <br />
+**Last Update:** `8/24/26` **Spotify Version:** `9.1.74`
+
+This is an independent clean fork maintained by [Nodzen](https://github.com/nodzen). It keeps the original project and community contributions while excluding unrelated prank and donation additions.
 
 This tweak makes Spotify think you have a Premium subscription, granting free listening, just like Spotilife, and provides some additional features like custom lyrics.
 
@@ -63,7 +66,7 @@ Please refrain from opening issues about the following features, as they are ser
 - AI DJ/Playlist
 - Spotify Connect (When using Spotify Connect, the device will act as a remote control and stream directly to the connected device. This is a server-sided limitation and is beyond the control of EeveeSpotify, so it will behave as if you have a Free subscription while using this feature.)
 
-## [Common Issues](https://github.com/jaydenjcpy/EeveeSpotifyReincarnated/blob/Master/common_issues.md)
+## [Common Issues](https://github.com/nodzen/EeveeSpotifyReincarnated/blob/Master/common_issues.md)
 Please check out the hyperlink above before opening an issue
 
 
