@@ -1,6 +1,6 @@
 ![Banner](Images/banner.png?)
 
-# EeveeSpotifyReincarnated Clean
+# EeveeSpotifyReincarnatedClean
 
 **Maintainer:** [Nodzen](https://github.com/nodzen) <br />
 **Based on:** [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) <br />
