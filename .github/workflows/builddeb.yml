@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Git tag to create/use for the draft release (e.g. v6.6.3.1)"
+        description: "Git tag to create/use for the draft release (e.g. v6.6.9)"
         required: true
-        default: "v6.6.3.1"
+        default: "v6.6.9"
       release_name:
         description: "Release title (optional)"
         required: false
