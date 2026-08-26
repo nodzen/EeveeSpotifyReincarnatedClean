@@ -4,27 +4,6 @@ import UIKit
 import Foundation
 import ObjectiveC.runtime
 
-func writeDebugLog(_ message: String) {
-    // Log to system console
-    NSLog("[EeveeSpotify] %@", message)
-
-    let logPath = NSTemporaryDirectory() + "eeveespotify_debug.log"
-    let timestamp = Date().description
-    let logMessage = "[\(timestamp)] \(message)\n"
-    
-    if FileManager.default.fileExists(atPath: logPath) {
-        if let fileHandle = FileHandle(forWritingAtPath: logPath) {
-            fileHandle.seekToEndOfFile()
-            if let data = logMessage.data(using: .utf8) {
-                fileHandle.write(data)
-            }
-            fileHandle.closeFile()
-        }
-    } else {
-        try? logMessage.write(toFile: logPath, atomically: true, encoding: .utf8)
-    }
-}
-
 // Timestamp of tweak initialization — persists across Orion reinits within the same process
 // using an environment variable. This prevents the 30s auth window from resetting
 // when the C++ timer triggers a session reinit cycle.
@@ -198,6 +177,8 @@ func activateSessionLogoutProtection(minimal: Bool) {
 // MARK: - Bootstrap breadcrumbs
 @inline(__always)
 func eeveeBreadcrumb(_ label: String) {
+    guard EeveeDebug.enabled else { return }
+
     let path = NSTemporaryDirectory() + "eeveespotify_boot.txt"
     let ts = Date().description
     let line = "[\(ts)] \(label)\n"
@@ -210,20 +191,13 @@ func eeveeBreadcrumb(_ label: String) {
     }
 }
 
-@inline(__always)
-func eeveeEnvFlag(_ name: String) -> Bool {
-    guard let v = getenv(name) else { return false }
-    let s = String(cString: v).lowercased()
-    return s == "1" || s == "true" || s == "yes" || s == "y"
-}
-
 struct EeveeSpotify: Tweak {
     static let version = "6.6.8"
     static let buildNumber = "2"
     static let repoSlug = GeneratedConfig.repoSlug
     
     static var hookTarget: VersionHookTarget {
-        let version = Bundle.main.infoDictionary!["CFBundleShortVersionString"] as! String
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
         
         NSLog("[EeveeSpotify] Detected Spotify version: \(version)")
         
@@ -327,8 +301,8 @@ struct EeveeSpotify: Tweak {
             activateSessionLogoutProtection(minimal: false)
         }
 
-        let spotifyVersion = Bundle.main.infoDictionary!["CFBundleShortVersionString"] as! String
-        let spotifyBuild = Bundle.main.infoDictionary!["CFBundleVersion"] as? String ?? "?"
+        let spotifyVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+        let spotifyBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
         let iosVersion = UIDevice.current.systemVersion
         let deviceModel = UIDevice.current.model
 

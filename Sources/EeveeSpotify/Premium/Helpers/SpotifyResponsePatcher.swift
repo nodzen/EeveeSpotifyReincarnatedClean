@@ -36,31 +36,6 @@ enum SpotifyResponsePatcher {
         syntheticLyricsTasks.consume(task)
     }
 
-    static func shouldBlock(_ url: URL) -> Bool {
-        let elapsed = Date().timeIntervalSince(tweakInitTime)
-        let path = url.path.lowercased()
-
-        if url.isSessionInvalidation || url.isAdRelated {
-            return true
-        }
-        if path.contains("/dac/view/v1/") { return true }
-        if path.contains("/esperanto/") && (path.contains("ad") || path.contains("slot")) {
-            return true
-        }
-
-        // 30s grace: signup/public is part of fresh-login; blocking pre-30s
-        // breaks first-launch.
-        if elapsed > 30 {
-            return url.isAccountValidate || url.isOndemandSelector
-                || url.isTrialsFacade || url.isPremiumMarketing || url.isPendragonFetchMessageList
-                || url.isPushkaTokens
-                || url.path.contains("signup/public") || url.path.contains("apresolve")
-                || url.path.contains("pses/screenconfig")
-                || url.path.contains("v1/customize")
-        }
-        return false
-    }
-
     static func shouldModify(_ url: URL) -> Bool {
         let shouldPatchPremium = BasePremiumPatchingGroup.isActive || PremiumBootstrapGroup.isActive
         let shouldReplaceLyrics = BaseLyricsGroup.isActive
@@ -73,31 +48,6 @@ enum SpotifyResponsePatcher {
                 isDAC
             ))
             || BrowsitaSectionStripper.shouldHandle(url)
-    }
-
-    static func blockedResponseData(for url: URL) -> Data {
-        if url.isAccountValidate {
-            return #"{"status":1,"country":"US","is_country_launched":true}"#.data(using: .utf8)!
-        }
-        if url.isTrialsFacade {
-            return #"{"result":"NOT_ELIGIBLE"}"#.data(using: .utf8)!
-        }
-        if url.isPremiumMarketing {
-            return #"{}"#.data(using: .utf8)!
-        }
-        if url.isSessionInvalidation || url.path.contains("signup/public")
-            || url.path.contains("apresolve") {
-            // Logout daemons parse the body; synthetic OK keeps them off the
-            // actual logout codepath.
-            return #"{"status":"OK"}"#.data(using: .utf8)!
-        }
-        if url.path.contains("pses/screenconfig") {
-            return #"{}"#.data(using: .utf8)!
-        }
-        if url.path.contains("v1/customize"), let cached = cachedCustomizeData {
-            return cached
-        }
-        return Data()
     }
 
     enum PatchTag: String {

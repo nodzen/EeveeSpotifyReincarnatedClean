@@ -4,7 +4,9 @@ import Foundation
 // to the app tmp dir and logs the first 256 bytes as hex. Flip `enabled` to
 // inspect new ad surfaces, then flip back before shipping.
 enum CasitaResponseProbe {
-    static var enabled: Bool = false
+    // Body dumps are opt-in even in a debug build because they may contain
+    // account-specific recommendation/configuration data.
+    static var enabled: Bool = EeveeDebug.enabled && eeveeEnvFlag("EEVEE_ENABLE_CASITA_PROBE")
 
     private static let lock = NSLock()
     private static var buffers: [Int: Data] = [:]

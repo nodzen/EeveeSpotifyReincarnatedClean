@@ -10,25 +10,6 @@ import Foundation
 struct SessionLogoutAuthHookGroup: HookGroup { }
 struct SessionLogoutConnectivityHookGroup: HookGroup { }
 struct SessionLogoutAblyHookGroup: HookGroup { }
-struct SessionLogoutNetworkHookGroup: HookGroup { }
-
-/// Redacted session breadcrumb. It records only host/path, HTTP status and
-/// an error code; never query parameters, headers or response bodies.
-func logSessionResponse(_ task: URLSessionDataTask, url: URL, error: Error?) {
-    guard url.isSessionDiagnosticRelated else { return }
-
-    let statusCode = (task.response as? HTTPURLResponse)?.statusCode ?? 0
-    let errorSummary: String
-    if let actualError = error {
-        let nsError = actualError as NSError
-        errorSummary = "\(nsError.domain)#\(nsError.code)"
-    } else {
-        errorSummary = "none"
-    }
-
-    let host = url.host ?? "?"
-    writeDebugLog("[SESSION][RESPONSE] task=\(task.taskIdentifier) status=\(statusCode) host=\(host) path=\(url.path) error=\(errorSummary)")
-}
 
 // Ably action name mapping for readable logs
 private let ablyActionNames: [Int: String] = [
@@ -200,76 +181,5 @@ class ARTSRWebSocketHook: ClassHook<NSObject> {
             }
         }
         orig._handleFrameWithData(data, opCode: code)
-    }
-}
-
-// MARK: - Global URLSessionTask hook to catch auth traffic bypassing SPTDataLoaderService
-
-class URLSessionTaskResumeHook: ClassHook<NSObject> {
-    typealias Group = SessionLogoutNetworkHookGroup
-    static let targetName = "NSURLSessionTask"
-
-    func resume() {
-        if let task = target as? URLSessionTask,
-           let url = task.currentRequest?.url ?? task.originalRequest?.url,
-           let host = url.host?.lowercased() {
-
-            let elapsed = Date().timeIntervalSince(tweakInitTime)
-            let elapsedInt = Int(elapsed)
-            let path = url.path
-
-            // Cancel only dedicated measurement uploads. URLSession tasks must
-            // be started before cancellation: cancelling a never-started task
-            // can leave its completion state machine uninitialized and crash
-            // later in the delegate. Do not widen this to the authenticated
-            // Spotify Event Sender; it also carries core playback/royalty data.
-            if UserDefaults.blockSpotifyAnalytics && url.isSpotifyAnalyticsRelated {
-                let method = task.currentRequest?.httpMethod ?? "?"
-                writeDebugLog("[NET] Cancelling dedicated analytics: \(method) \(host)\(path)")
-                orig.resume()
-                task.cancel()
-                return
-            }
-
-            // bootstraps pass through: modifyRemoteConfiguration is idempotent, and
-            // cancelling the second one broke fresh login on 9.1.34.
-            let isAuthRelated = host.contains("login5") ||
-                host.contains("apresolve") ||
-                (host.contains("googleapis.com") && path.contains("/token")) ||
-                path.contains("bootstrap/v1/bootstrap") ||
-                path.contains("DeleteToken") ||
-                path.contains("signup/public") ||
-                path.contains("pses/screenconfig") ||
-                path.contains("logout") ||
-                path.contains("sign-out") ||
-                path.contains("session/purge") ||
-                path.contains("token/revoke") ||
-                path.contains("auth/expire") ||
-                path.contains("product-state") ||
-                path.contains("melody") ||
-                path.contains("auth/v1")
-
-            if isAuthRelated {
-                let method = task.currentRequest?.httpMethod ?? "?"
-                writeDebugLog("[NET] Auth request: \(method) \(host)\(path) at \(elapsedInt)s")
-            }
-
-            // NOTE: Do NOT block login5, googleapis.com/token, logout routes,
-            // token refresh, customize, apresolve or screenconfig. They are
-            // part of normal login/recovery and blocking them leaves stale
-            // state in the client. DeleteToken is the one credential-deletion
-            // request we retain as a narrow post-startup guard.
-            let isSpotifyFirstParty = host == "spclient.wg.spotify.com" ||
-                host.hasSuffix(".spotify.com")
-            if isSpotifyFirstParty {
-                if elapsed > 30 && url.isDeleteToken {
-                    writeDebugLog("[NET] Cancelling DeleteToken at \(elapsedInt)s")
-                    orig.resume()
-                    task.cancel()
-                    return
-                }
-            }
-        }
-        orig.resume()
     }
 }

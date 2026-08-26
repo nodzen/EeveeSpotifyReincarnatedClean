@@ -5,10 +5,10 @@ import Foundation
 // Fetches lyrics from api.spicylyrics.org and converts the response into LyricsDto.
 //
 // ── Token availability ───────────────────────────────────────────────────────
-// spotifyAccessToken is captured lazily from Spotify's outgoing requests.
+// SpotifyAccessTokenStore captures the token lazily from Spotify's outgoing requests.
 // On first track load it may be nil. The Spicetify extension uses
 // Platform.GetSpotifyAccessToken() which awaits the token asynchronously.
-// We replicate that by polling spotifyAccessToken for up to 5 seconds before
+// We replicate that by polling the store for up to 5 seconds before
 // giving up — this prevents an immediate 401 from the API triggering Genius fallback.
 //
 // ── iOS 27 crash ─────────────────────────────────────────────────────────────
@@ -43,15 +43,15 @@ class SpicyLyricsRepository: LyricsRepository {
 
     // MARK: - Token wait
     //
-    // Poll for spotifyAccessToken up to `timeout` seconds.
+    // Poll for a captured token up to `timeout` seconds.
     // Returns the token or nil if not available in time.
     private func waitForToken(timeout: TimeInterval = 5.0) -> String? {
-        if let token = spotifyAccessToken { return token }
+        if let token = SpotifyAccessTokenStore.value { return token }
 
         let deadline = Date(timeIntervalSinceNow: timeout)
         while Date() < deadline {
             Thread.sleep(forTimeInterval: 0.1)
-            if let token = spotifyAccessToken { return token }
+            if let token = SpotifyAccessTokenStore.value { return token }
         }
         return nil
     }
@@ -178,7 +178,7 @@ class SpicyLyricsRepository: LyricsRepository {
             // Auth failure — token was stale or rejected. Clear it so the next
             // attempt re-waits for a fresh one.
             writeDebugLog("[SpicyLyrics] Auth error \(httpStatus) for \(trackId) — clearing cached token")
-            spotifyAccessToken = nil
+            SpotifyAccessTokenStore.clear()
             throw LyricsError.noSuchSong
         default:
             writeDebugLog("[SpicyLyrics] Unexpected status \(httpStatus) for \(trackId)")

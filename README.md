@@ -46,6 +46,21 @@ This tweak makes Spotify think you have a Premium subscription, granting free li
   </ol>
 </details>
 
+## Local debug build
+
+The normal build is release-like: diagnostic probes, detailed logs and the
+legacy broad response blocking are disabled. To build a separate diagnostic
+variant locally, set `EEVEE_DEBUG=1`; its IPA receives a `-debug` suffix:
+
+```sh
+EEVEE_DEBUG=1 ./build-ipa-local.sh Spotify_v9.1.76.ipa
+```
+
+Use the default command without `EEVEE_DEBUG=1` for the regular release-like
+IPA. The debug variant retains the old broad response behavior as a
+compatibility fallback; set `EEVEE_DISABLE_LEGACY_RESPONSE_BLOCKS=1` at runtime
+to disable it while investigating a problem.
+
 ## The History
 
 In January 2024, Spotilife, the only tweak to get Spotify Premium, stopped working on new Spotify versions. [whoeevee](https://github.com/whoeevee) decompiled Spotilife, reverse-engineered Spotify, intercepted requests, etc., and created this tweak.

@@ -20,6 +20,12 @@ EeveeSpotify_SWIFTFLAGS = -ISources/EeveeSpotifyC/include -Osize
 EeveeSpotify_EXTRA_FRAMEWORKS = EeveeSwiftProtobuf
 EeveeSpotify_CFLAGS = -fobjc-arc -ISources/EeveeSpotifyC/include -Os
 
+# Normal packages are release-like and omit diagnostics. Build a separate
+# diagnostic variant with: EEVEE_DEBUG=1 make package ...
+ifeq ($(EEVEE_DEBUG),1)
+EeveeSpotify_SWIFTFLAGS += -D EEVEESPOTIFY_DEBUG
+endif
+
 # RootHide's compatibility implementation of libroot resolves jailbreak paths
 # through libroothide at runtime. Rootless builds continue to use libroot.
 ifeq ($(THEOS_PACKAGE_SCHEME),roothide)

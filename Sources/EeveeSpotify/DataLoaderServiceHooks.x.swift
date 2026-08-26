@@ -1,9 +1,6 @@
 import Foundation
 import Orion
 
-// Bearer token captured from premium-relevant requests; reused by lyrics fetch etc.
-public var spotifyAccessToken: String?
-
 // Spotify's primary URLSession delegate (wg-spclient: bootstrap, customize, PAM).
 // Patching lives in SpotifyResponsePatcher so HttpClientURLSessionHook can share it.
 
@@ -16,16 +13,8 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         task: URLSessionDataTask,
         didCompleteWithError error: Error?
     ) {
-        if let request = task.currentRequest,
-           let headers = request.allHTTPHeaderFields,
-           let auth = headers["Authorization"] ?? headers["authorization"],
-           auth.hasPrefix("Bearer ") {
-            let token = String(auth.dropFirst(7))
-            spotifyAccessToken = token
-            // TEMP DEBUG: log token shape + source URL, never the token itself.
-            let dotCount = token.filter { $0 == "." }.count
-            let shape = "len=\(token.count) dots=\(dotCount) prefix=\(token.prefix(6))"
-            writeDebugLog("[TokenCapture] \(shape) from \(task.currentRequest?.url?.absoluteString ?? "<no url>")")
+        if let request = task.currentRequest {
+            SpotifyAccessTokenStore.capture(from: request)
         }
 
         guard let url = task.currentRequest?.url else {
@@ -39,8 +28,8 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             CasitaResponseProbe.flush(task, url: url)
         }
 
-        if SpotifyResponsePatcher.shouldBlock(url) {
-            orig.URLSession(session, dataTask: task, didReceiveData: SpotifyResponsePatcher.blockedResponseData(for: url))
+        if SpotifyResponseBlockPolicy.shouldBlock(url) {
+            orig.URLSession(session, dataTask: task, didReceiveData: SpotifyResponseBlockPolicy.responseData(for: url))
             orig.URLSession(session, task: task, didCompleteWithError: nil)
             return
         }
@@ -195,7 +184,7 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
 
         // Suppress original data for endpoints we'll replace in
         // didCompleteWithError — otherwise the consumer sees both.
-        if SpotifyResponsePatcher.shouldBlock(url) { return }
+        if SpotifyResponseBlockPolicy.shouldBlock(url) { return }
         if CasitaResponseProbe.shouldProbe(url) {
             CasitaResponseProbe.append(data, for: task)
         }

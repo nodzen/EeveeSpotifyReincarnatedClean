@@ -307,6 +307,8 @@ private func dumpClassesOnce() {
 }
 
 func activateEeveeProbes() {
+    guard EeveeDebug.probesEnabled else { return }
+
     let netOn = traceNet
     NSLog("[PROBE] activating: net=%@ notif=%@ ads=%@ sb=%@",
           netOn ? "on" : "off",

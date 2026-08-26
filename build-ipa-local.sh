@@ -32,7 +32,11 @@ VERSION=$(grep -E '^Version:' control | awk '{print $2}')
 SPOT_VERSION=$(unzip -p "$VANILLA_IPA" 'Payload/Spotify.app/Info.plist' \
     | plutil -extract CFBundleShortVersionString raw - 2>/dev/null || echo "unknown")
 OUT_DIR="Outputs/IPAS"
-OUT_IPA="$OUT_DIR/EeveeSpotify-${VERSION}-${SPOT_VERSION}.ipa"
+DEBUG_SUFFIX=""
+if [ "${EEVEE_DEBUG:-0}" = "1" ]; then
+    DEBUG_SUFFIX="-debug"
+fi
+OUT_IPA="$OUT_DIR/EeveeSpotify-${VERSION}-${SPOT_VERSION}${DEBUG_SUFFIX}.ipa"
 mkdir -p "$OUT_DIR"
 
 color() { printf '\033[1;32m==> %s\033[0m\n' "$*"; }
@@ -41,8 +45,8 @@ color "1/6  EeveeSwiftProtobuf.framework"
 chmod +x Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh
 Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh
 
-color "2/6  theos make package"
-THEOS_PACKAGE_SCHEME=rootless make package FINALPACKAGE=1
+color "2/6  theos make package (debug=${EEVEE_DEBUG:-0})"
+THEOS_PACKAGE_SCHEME=rootless make package FINALPACKAGE=1 EEVEE_DEBUG="${EEVEE_DEBUG:-0}"
 DEB_FILE=$(ls -t packages/com.eevee.spotify_*.deb 2>/dev/null | head -1)
 [ -n "$DEB_FILE" ] || { echo "deb not produced"; exit 1; }
 

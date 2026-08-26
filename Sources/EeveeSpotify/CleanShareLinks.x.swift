@@ -3,7 +3,7 @@ import UIKit
 
 enum CleanShareLinks {
     private static let spotifyShareURLPattern = #"https?://(?:[a-z0-9-]+\.)*open\.spotify\.com/[^\s"<>]+"#
-    private static let spotifyShareURLRegex = try! NSRegularExpression(
+    private static let spotifyShareURLRegex = try? NSRegularExpression(
         pattern: spotifyShareURLPattern,
         options: [.caseInsensitive]
     )
@@ -36,12 +36,13 @@ enum CleanShareLinks {
     /// Returns a copy of the string with any Spotify share links cleaned.
     static func cleanedString(from string: String) -> String {
         guard UserDefaults.cleanShareLinks else { return string }
+        guard let regex = spotifyShareURLRegex else { return string }
 
         let nsString = string as NSString
         let fullRange = NSRange(location: 0, length: nsString.length)
         var replacements: [(NSRange, String)] = []
 
-        for match in spotifyShareURLRegex.matches(in: string, options: [], range: fullRange) {
+        for match in regex.matches(in: string, options: [], range: fullRange) {
             let urlString = nsString.substring(with: match.range)
             guard let url = URL(string: urlString) else { continue }
 

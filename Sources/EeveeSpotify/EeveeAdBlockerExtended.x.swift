@@ -27,7 +27,7 @@ private let killInStreamAdsService     = true
 private let killEmbeddedNPVService     = true
 private let killNativeAdsLoggerService = true
 private let killSponsoredCtxAttachment = true
-private let logAdBlockerEvents         = true
+private let logAdBlockerEvents         = EeveeDebug.enabled
 
 @inline(__always)
 private func adlog(_ what: String) {

@@ -77,7 +77,7 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
     }
 
     // 4. Spotify Web API fallback using captured Bearer token
-    if !hasMetadata, let token = spotifyAccessToken {
+    if !hasMetadata, let token = SpotifyAccessTokenStore.value {
         if let info = fetchTrackDetails(trackId: trackId, token: token) {
             currentTitle = info.title
             currentArtist = info.artist

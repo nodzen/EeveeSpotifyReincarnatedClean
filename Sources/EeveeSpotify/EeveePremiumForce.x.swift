@@ -218,7 +218,7 @@ struct EeveePremiumForceGroup: HookGroup {}
 private let enableDictRewrite = false
 private let enableDirectGetters = false
 private let enableAdsHook = false
-private let enablePassiveProductStateLog = true
+private let enablePassiveProductStateLog = EeveeDebug.enabled
 
 func activateEeveePremiumForce() {
     NSLog("[FORCE] activating dict=%@ getters=%@ ads=%@ passiveLog=%@",

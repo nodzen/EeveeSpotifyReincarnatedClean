@@ -23,7 +23,7 @@ func showVersionBannerOnWindow(_ window: UIWindow) {
     label.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
     label.text = """
     🎵 EeveeSpotify v\(EeveeSpotify.version)
-    Spotify \(Bundle.main.infoDictionary!["CFBundleShortVersionString"] as! String)
+    Spotify \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown")
     Updated by Skye
     """
     banner.addSubview(label)

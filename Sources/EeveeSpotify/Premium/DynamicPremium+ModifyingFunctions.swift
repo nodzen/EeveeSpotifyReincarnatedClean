@@ -19,12 +19,17 @@ func modifyRemoteConfiguration(_ configuration: inout UcsResponse) {
             liveMessagingAssignmentKeys.contains("\($0.propertyID.scope).\($0.propertyID.name)")
         }
 
-        configuration.resolve.configuration = try! BundleHelper.shared.resolveConfiguration()
-
-        configuration.assignedValues.removeAll {
-            liveMessagingAssignmentKeys.contains("\($0.propertyID.scope).\($0.propertyID.name)")
+        do {
+            configuration.resolve.configuration = try BundleHelper.shared.resolveConfiguration()
+            configuration.assignedValues.removeAll {
+                liveMessagingAssignmentKeys.contains("\($0.propertyID.scope).\($0.propertyID.name)")
+            }
+            configuration.assignedValues.append(contentsOf: liveMessagingAssignments)
+        } catch {
+            // Keep Spotify's live configuration if the bundled snapshot is
+            // missing or incompatible with this app build.
+            writeDebugLog("[CONFIG] bundled resolve configuration unavailable; keeping live response: \(error)")
         }
-        configuration.assignedValues.append(contentsOf: liveMessagingAssignments)
     }
 
     // Apply targeted changes after an optional full overwrite. Doing it
