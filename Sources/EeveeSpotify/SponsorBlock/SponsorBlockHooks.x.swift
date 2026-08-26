@@ -47,7 +47,7 @@ struct SponsorBlockGroup: HookGroup {}
 
 func activateSponsorBlock() {
     let opts = UserDefaults.sponsorBlockOptions
-    let cls = NSClassFromString("SPTPlayerServiceImplementation")
+    let cls: AnyClass? = NSClassFromString("SPTPlayerServiceImplementation")
     writeDebugLog("[SB] activate: enabled=\(opts.enabled ? "Y" : "N") logOnly=\(opts.logOnly ? "Y" : "N") cats=\(opts.enabledCategoriesArray().joined(separator: ",")) server=\(opts.serverURL) class=\(cls == nil ? "<missing>" : "<found>")")
     SponsorBlockGroup().activate()
     writeDebugLog("[SB] hook group activated")

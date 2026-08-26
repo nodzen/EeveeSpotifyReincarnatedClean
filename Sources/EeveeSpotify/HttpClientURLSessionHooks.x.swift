@@ -30,6 +30,8 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
             return
         }
 
+        logSessionResponse(task, url: url, error: error)
+
         if CasitaResponseProbe.shouldProbe(url) {
             CasitaResponseProbe.flush(task, url: url)
         }

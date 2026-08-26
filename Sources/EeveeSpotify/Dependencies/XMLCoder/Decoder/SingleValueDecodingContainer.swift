@@ -19,6 +19,19 @@ extension XMLDecoderImplementation: SingleValueDecodingContainer {
         return try unbox(try topContainer())
     }
 
+    // Swift 6 adds these overloads to SingleValueDecodingContainer. Keeping
+    // explicit implementations here prevents the older generic overloads
+    // below from being diagnosed as near-matches by the current SDK.
+    @available(iOS 18.0, macOS 15.0, tvOS 18.0, watchOS 11.0, *)
+    public func decode(_: Int128.Type) throws -> Int128 {
+        return try unbox(try topContainer())
+    }
+
+    @available(iOS 18.0, macOS 15.0, tvOS 18.0, watchOS 11.0, *)
+    public func decode(_: UInt128.Type) throws -> UInt128 {
+        return try unbox(try topContainer())
+    }
+
     public func decode(_: Decimal.Type) throws -> Decimal {
         return try unbox(try topContainer())
     }

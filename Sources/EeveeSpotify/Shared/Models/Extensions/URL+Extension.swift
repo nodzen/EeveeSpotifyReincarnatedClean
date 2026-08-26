@@ -36,7 +36,7 @@ extension URL {
     // Blocked endpoint matchers (session protection)
 
     var isDeleteToken: Bool {
-        self.path.contains("DeleteToken")
+        self.path.lowercased().contains("deletetoken")
     }
 
     var isAccountValidate: Bool {
@@ -150,13 +150,106 @@ extension URL {
         return false
     }
 
-    // Additional session protection endpoints
+    /// Dedicated, non-essential measurement endpoints.
+    ///
+    /// Keep this list deliberately narrow. Spotify's first-party Event Sender
+    /// also carries playback/royalty reports (RawCoreStream, msPlayed and
+    /// offline reports), so its authenticated endpoint is intentionally not
+    /// classified here. Blocking that endpoint would risk playback history,
+    /// offline sync and repeated retry loops.
+    var isSpotifyAnalyticsRelated: Bool {
+        let path = self.path.lowercased()
+        let host = (self.host ?? "").lowercased()
+
+        // Firebase Analytics / Crashlytics / Firebase performance plumbing.
+        // These hosts are not used for Spotify authentication or content.
+        if host == "firebaselogging.googleapis.com" ||
+           host == "crashlyticsreports-pa.googleapis.com" {
+            return true
+        }
+
+        if host == "firebase-settings.crashlytics.com" ||
+           host == "firebaseinstallations.googleapis.com" {
+            return true
+        }
+
+        // Branch's safetrack hosts are specifically listed by Spotify as
+        // tracking domains. Keep api3.branch.io available for deep-link
+        // resolution; it is not a dedicated analytics endpoint.
+        if host == "api-safetrack.branch.io" ||
+           host == "api-safetrack-eu.branch.io" {
+            return true
+        }
+
+        // ComScore measurement endpoints.
+        if host == "census-app.scorecardresearch.com" ||
+           host == "census-app-x.scorecardresearch.com" ||
+           host == "b.scorecardresearch.com" ||
+           host == "sb.scorecardresearch.com" ||
+           host == "udm.scorecardresearch.com" {
+            return true
+        }
+
+        // Google ad attribution and Cast/Google logging. Do not block OAuth
+        // endpoints on googleapis.com; only these exact logging destinations.
+        if host == "www.googleadservices.com" &&
+           path.hasPrefix("/pagead/conversion") {
+            return true
+        }
+
+        if host == "play.googleapis.com" && path == "/log" {
+            return true
+        }
+
+        // Anonymous/public Spotify event batches are UI/marketing telemetry.
+        // The authenticated Event Sender route is deliberately left intact
+        // because it also contains core stream reporting.
+        if host == "spclient.wg.spotify.com" &&
+           path.hasPrefix("/gabo-receiver-service/public/v3/events") {
+            return true
+        }
+
+        return false
+    }
+
+    /// A user-visible logout route. It is intentionally kept separate from
+    /// automatic session invalidation: a manual logout must continue to work.
+    var isExplicitLogoutEndpoint: Bool {
+        let path = self.path.lowercased()
+        return path == "/logout" ||
+            path.hasSuffix("/logout") ||
+            path.contains("/sign-out")
+    }
+
+    /// Endpoints which invalidate stored credentials without being the normal
+    /// user-facing logout route. Keep this list narrow: product-state,
+    /// license, melody and auth-expiry checks are state/refresh traffic, not
+    /// proof that Spotify is logging the account out.
     var isSessionInvalidation: Bool {
-        self.path.contains("logout") || self.path.contains("sign-out") ||
-        self.path.contains("session/purge") || self.path.contains("token/revoke") ||
-        self.path.contains("auth/expire") ||
-        (self.path.contains("melody") && self.path.contains("check")) ||
-        self.path.contains("product-state") ||
-        (self.path.contains("license") && self.path.contains("check"))
+        let path = self.path.lowercased()
+        return isDeleteToken ||
+            path.contains("/session/purge") ||
+            path.contains("/token/revoke")
+    }
+
+    /// State checks worth recording while diagnosing a logout, but never
+    /// replace or cancel. Returning their real response is important for
+    /// token refresh and the session state machine.
+    var isSessionStateCheck: Bool {
+        let path = self.path.lowercased()
+        return path.contains("auth/expire") ||
+            (path.contains("melody") && path.contains("check")) ||
+            path.contains("product-state") ||
+            (path.contains("license") && path.contains("check"))
+    }
+
+    /// Used only for redacted diagnostics. Query parameters and bodies are
+    /// deliberately excluded from the log.
+    var isSessionDiagnosticRelated: Bool {
+        isSessionInvalidation ||
+            isExplicitLogoutEndpoint ||
+            isSessionStateCheck ||
+            isBootstrap ||
+            isCustomize
     }
 }

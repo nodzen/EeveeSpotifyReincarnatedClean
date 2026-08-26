@@ -100,6 +100,11 @@ could_not_share_popup = "Не удалось поделиться контент
 
 /* MARK: Lyrics */
 
+// Miscellaneous
+
+block_spotify_analytics = "Блокировать аналитику Spotify";
+block_spotify_analytics_description = "Блокирует отдельные загрузки Firebase, Crashlytics, Branch, ComScore, рекламной атрибуции и анонимных событий интерфейса и отключает сбор SDK, если это поддерживается. Авторизация, воспроизведение, контент, поиск и основная отчётность о прослушивании остаются включены. После изменения перезапустите Spotify.";
+
 fallback_attribute = "Проблема";
 romanized_attribute = "Латинизирован";
 

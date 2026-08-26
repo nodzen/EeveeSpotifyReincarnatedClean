@@ -308,13 +308,12 @@ private func dumpClassesOnce() {
 
 func activateEeveeProbes() {
     let netOn = traceNet
-    let notifOn = true
     NSLog("[PROBE] activating: net=%@ notif=%@ ads=%@ sb=%@",
           netOn ? "on" : "off",
-          notifOn ? "on" : "off",
+          "on",
           traceAds ? "on" : "off",
           traceSB ? "on" : "off")
     if netOn { ProbeNetGroup().activate() }
-    if notifOn { ProbeNotifGroup().activate() }
+    ProbeNotifGroup().activate()
     dumpClassesOnce()
 }

@@ -15,6 +15,7 @@ extension UserDefaults {
     private static let hasPatchedBootstrapKey = "eeveeHasPatchedBootstrap"
     private static let iconNamePrettifyKey = "iconNamePrettify"
     private static let cleanShareLinksKey = "cleanShareLinks"
+    private static let blockSpotifyAnalyticsKey = "blockSpotifyAnalytics"
 
     static var musixmatchToken: String {
         get {
@@ -108,6 +109,17 @@ extension UserDefaults {
         }
         set (cleanShareLinks) {
             container.set(cleanShareLinks, forKey: cleanShareLinksKey)
+        }
+    }
+
+    /// Blocks only dedicated non-essential measurement endpoints. Core
+    /// Spotify playback, authentication and content traffic remains allowed.
+    static var blockSpotifyAnalytics: Bool {
+        get {
+            container.object(forKey: blockSpotifyAnalyticsKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: blockSpotifyAnalyticsKey)
         }
     }
 }

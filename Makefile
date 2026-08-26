@@ -26,7 +26,8 @@ ifeq ($(THEOS_PACKAGE_SCHEME),roothide)
 EeveeSpotify_SWIFTFLAGS += -D ROOTHIDE
 EeveeSpotify_LDFLAGS += -lroothide -Xlinker -rpath -Xlinker @loader_path/.jbroot/Library/Frameworks
 else
-EeveeSpotify_LDFLAGS += -lroot
+    # Theos adds libroot automatically for iPhone targets. Adding it here as
+    # well produces a duplicate-library warning and has no functional effect.
 endif
 
 # Sideload compatibility (keychain redirect, group containers, CloudKit) is

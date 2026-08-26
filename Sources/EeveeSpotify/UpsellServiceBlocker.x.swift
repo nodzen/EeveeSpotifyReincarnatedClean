@@ -125,7 +125,7 @@ class SelfLoadingUpsellBannerViewKill: ClassHook<UIView> {
 }
 
 func activateUpsellServiceBlocker() {
-    let loadSelector = Selector(("load"))
+    let loadSelector = NSSelectorFromString("load")
     let targets: [(String, String, () -> Void)] = [
         (GeneralUpsellsServiceKill.targetName, "UpsellsServiceImpl", { GeneralUpsellsServiceGroup().activate() }),
         (PremiumUpsellServiceKill.targetName, "PremiumUpsellServiceImpl", { PremiumUpsellServiceGroup().activate() }),
@@ -149,7 +149,7 @@ func activateUpsellServiceBlocker() {
         NSLog("[EeveeSpotify][UpsellService] %@ hook activated", label)
     }
 
-    let viewSelector = Selector(("didMoveToSuperview"))
+    let viewSelector = NSSelectorFromString("didMoveToSuperview")
     if let cls = NSClassFromString(SelfLoadingUpsellBannerViewKill.targetName) as? UIView.Type,
        class_getInstanceMethod(cls, viewSelector) != nil {
         SelfLoadingUpsellBannerViewGroup().activate()

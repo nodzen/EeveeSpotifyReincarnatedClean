@@ -437,7 +437,7 @@ final class SponsorBlockSkipper {
             writeDebugLog("[SB] no seek selector on \(String(cString: class_getName(object_getClass(player))))")
             return
         }
-        let cls = object_getClass(player)
+        guard let cls = object_getClass(player) else { return }
         guard let method = class_getInstanceMethod(cls, sel) else { return }
         // Spotify variants pass seek as either seconds (Double) or ms (Double).
         // Read the encoded arg type to pick the right unit instead of guessing.

@@ -40,9 +40,7 @@ enum SpotifyResponsePatcher {
         let elapsed = Date().timeIntervalSince(tweakInitTime)
         let path = url.path.lowercased()
 
-        if url.isDeleteToken || url.isSessionInvalidation
-            || path.contains("session/purge") || path.contains("token/revoke")
-            || url.isAdRelated {
+        if url.isSessionInvalidation || url.isAdRelated {
             return true
         }
         if path.contains("/dac/view/v1/") { return true }
@@ -87,10 +85,7 @@ enum SpotifyResponsePatcher {
         if url.isPremiumMarketing {
             return #"{}"#.data(using: .utf8)!
         }
-        if url.isSessionInvalidation
-            || url.path.contains("session/purge")
-            || url.path.contains("token/revoke")
-            || url.path.contains("signup/public")
+        if url.isSessionInvalidation || url.path.contains("signup/public")
             || url.path.contains("apresolve") {
             // Logout daemons parse the body; synthetic OK keeps them off the
             // actual logout codepath.

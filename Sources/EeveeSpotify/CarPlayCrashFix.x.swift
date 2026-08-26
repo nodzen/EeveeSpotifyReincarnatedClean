@@ -51,8 +51,8 @@ func activateCarPlayCrashFix() {
         return
     }
 
-    let icSel = Selector(("clientAssistantCellUnavailableWithError:"))
-    let ltSel = Selector(("setAssistantCellConfiguration:"))
+    let icSel = NSSelectorFromString("clientAssistantCellUnavailableWithError:")
+    let ltSel = NSSelectorFromString("setAssistantCellConfiguration:")
 
     let icOK = class_getInstanceMethod(icCls, icSel) != nil
     let ltOK = class_getInstanceMethod(ltCls, ltSel) != nil

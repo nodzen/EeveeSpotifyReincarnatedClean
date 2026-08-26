@@ -163,8 +163,8 @@ class SponsoredCtxAttachmentProbe: ClassHook<NSObject> {
 }
 
 func activateEeveeAdBlockerExtended() {
-    let loadSelector = Selector(("load"))
-    let initSelector = Selector(("init"))
+    let loadSelector = NSSelectorFromString("load")
+    let initSelector = NSSelectorFromString("init")
 
     let loadTargets: [(String, String, () -> Void)] = [
         (AdsServiceImplKill.targetName, "AdsServiceImpl", { AdsServiceImplGroup().activate() }),
@@ -199,7 +199,7 @@ func activateEeveeAdBlockerExtended() {
         NSLog("[EeveeSpotify][AdBlock] SponsoredCtxAttachment/init unavailable; skipping")
     }
 
-    let viewSelector = Selector(("didMoveToSuperview"))
+    let viewSelector = NSSelectorFromString("didMoveToSuperview")
     if let cls = NSClassFromString(SponsoredPlaylistHeaderViewKill.targetName) as? UIView.Type,
        class_getInstanceMethod(cls, viewSelector) != nil {
         SponsoredPlaylistHeaderViewGroup().activate()

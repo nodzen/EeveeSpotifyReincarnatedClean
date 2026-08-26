@@ -166,19 +166,19 @@ func activateUpsellPopupBlocker() {
     let targets: [(String, [Selector], String, () -> Void)] = [
         (
             SPTEncorePopUpDialogModelHook.targetName,
-            [Selector(("initWithTitle:description:image:primaryButtonTitle:secondaryButtonTitle:"))],
+            [NSSelectorFromString("initWithTitle:description:image:primaryButtonTitle:secondaryButtonTitle:")],
             "dialog model capture",
             { UpsellPopupModelCaptureGroup().activate() }
         ),
         (
             SPTEncorePopUpDialogHook.targetName,
-            [Selector(("update:"))],
+            [NSSelectorFromString("update:")],
             "dialog marker propagation",
             { UpsellPopupDialogCaptureGroup().activate() }
         ),
         (
             SPTEncorePopUpPresenterHook.targetName,
-            [Selector(("presentPopUp:"))],
+            [NSSelectorFromString("presentPopUp:")],
             "popup presenter",
             { UpsellPopupBlockerGroup().activate() }
         ),

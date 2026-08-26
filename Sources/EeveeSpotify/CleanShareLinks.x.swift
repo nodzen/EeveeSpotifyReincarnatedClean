@@ -192,9 +192,16 @@ enum CleanShareLinks {
         if let url = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSURL.self, from: data) {
             return url as URL
         }
-        if let object = try? NSKeyedUnarchiver.unarchiveTopLevelObjectWithData(data),
-           let url = object as? URL {
-            return url
+
+        // Compatibility fallback for older, non-secure pasteboard archives.
+        // Use the modern unarchiver API while explicitly opting out of secure
+        // coding for this legacy input; the result is still type-checked as NSURL.
+        if let unarchiver = try? NSKeyedUnarchiver(forReadingFrom: data) {
+            unarchiver.requiresSecureCoding = false
+            defer { unarchiver.finishDecoding() }
+            if let url = unarchiver.decodeObject(forKey: NSKeyedArchiveRootObjectKey) as? NSURL {
+                return url as URL
+            }
         }
         return nil
     }

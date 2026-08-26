@@ -63,9 +63,9 @@ struct LatestPremiumPatchingGroup: HookGroup { }
 // again. Activate only that hook when its exact Objective-C entry point exists.
 func activateV91ServerSidedReminderIfAvailable() {
     let className = ContentOffliningUIHelperImplementationModernHook.targetName
-    let selector = Selector((
+    let selector = NSSelectorFromString(
         "downloadToggledWithCurrentAvailability:addAction:removeAction:pageIdentifier:pageURI:interactionID:"
-    ))
+    )
 
     guard let cls = NSClassFromString(className),
           class_getInstanceMethod(cls, selector) != nil else {
@@ -88,7 +88,7 @@ func activatePremiumPatchingGroup() {
         NonIOS14PremiumPatchingGroup().activate()
         // Only activate if Spotify's UIView category method exists in this build —
         // the method was removed/renamed in 9.1.28 and hooking a missing method is a fatal crash.
-        let trackRowsSel = Selector(("initWithViewURI:onDemandSet:onDemandTrialService:trackRowsEnabled:productState:"))
+        let trackRowsSel = NSSelectorFromString("initWithViewURI:onDemandSet:onDemandTrialService:trackRowsEnabled:productState:")
         if UIView.instancesRespond(to: trackRowsSel) {
             V91PremiumPatchingGroup().activate()
         }
@@ -134,11 +134,11 @@ func activateSessionLogoutProtection(minimal: Bool) {
     // Auth hooks
     if let cls = NSClassFromString("SPTAuthSessionImplementation") {
         let required: [Selector] = [
-            Selector(("logout")),
-            Selector(("logoutWithReason:")),
-            Selector(("callSessionDidLogoutOnDelegateWithReason:")),
-            Selector(("logWillLogoutEventWithLogoutReason:")),
-            Selector(("destroy")),
+            NSSelectorFromString("logout"),
+            NSSelectorFromString("logoutWithReason:"),
+            NSSelectorFromString("callSessionDidLogoutOnDelegateWithReason:"),
+            NSSelectorFromString("logWillLogoutEventWithLogoutReason:"),
+            NSSelectorFromString("destroy"),
         ]
         let ok = required.allSatisfy { classHasInstanceMethod(cls, $0) }
         if ok {
@@ -154,9 +154,9 @@ func activateSessionLogoutProtection(minimal: Bool) {
     // Connectivity hooks
     if let cls = NSClassFromString("_TtC24Connectivity_SessionImpl18SessionServiceImpl") {
         let required: [Selector] = [
-            Selector(("automatedLogoutThenLogin")),
-            Selector(("userInitiatedLogout")),
-            Selector(("sessionDidLogout:withReason:")),
+            NSSelectorFromString("automatedLogoutThenLogin"),
+            NSSelectorFromString("userInitiatedLogout"),
+            NSSelectorFromString("sessionDidLogout:withReason:"),
         ]
         let ok = required.allSatisfy { classHasInstanceMethod(cls, $0) }
         if ok {
@@ -172,8 +172,8 @@ func activateSessionLogoutProtection(minimal: Bool) {
     // Ably hooks
     if let cls = NSClassFromString("ARTWebSocketTransport") {
         let required: [Selector] = [
-            Selector(("webSocket:didReceiveMessage:")),
-            Selector(("webSocket:didFailWithError:")),
+            NSSelectorFromString("webSocket:didReceiveMessage:"),
+            NSSelectorFromString("webSocket:didFailWithError:"),
         ]
         let ok = required.allSatisfy { classHasInstanceMethod(cls, $0) }
         if ok {
@@ -275,6 +275,11 @@ struct EeveeSpotify: Tweak {
             return
         }
 
+        // Best-effort disablement of embedded analytics SDK collection. The
+        // URLSession classifier is still required because SDK initialization
+        // order and available selectors vary across Spotify builds.
+        disableKnownSpotifyAnalyticsCollection()
+
         // Local-only premium force. Activated first after the recovery kill-switch,
         // before version gating. Independent of patchType / bootstrap
         // patching / network interception. Keeps premium UI/state even if every
@@ -343,7 +348,6 @@ struct EeveeSpotify: Tweak {
             ("SPTAuthSessionImplementation", "SPTAuthSession"),
             ("_TtC24Connectivity_SessionImpl18SessionServiceImpl", "SessionServiceImpl"),
             ("SPTAuthLegacyLoginControllerImplementation", "LegacyLoginController"),
-            ("_TtC24Connectivity_SessionImplP33_831B98CC28223E431E21CD27ADD20AF222OauthAccessTokenBridge", "OauthAccessTokenBridge"),
             ("ARTWebSocketTransport", "AblyWebSocket"),
             ("ARTSRWebSocket", "AblySRWebSocket"),
         ]
@@ -371,7 +375,7 @@ struct EeveeSpotify: Tweak {
 
                 // Optional UI hooks (safe-gated)
                 if let hub = NSClassFromString("HUBViewModelBuilderImplementation"),
-                   class_getInstanceMethod(hub, Selector(("addJSONDictionary:"))) != nil {
+                   class_getInstanceMethod(hub, NSSelectorFromString("addJSONDictionary:")) != nil {
                     PremiumUIHooksGroup().activate()
                 } else {
                     writeDebugLog("[INIT] Skipped PremiumUIHooksGroup (missing HUBViewModelBuilderImplementation/addJSONDictionary:)")
@@ -416,7 +420,7 @@ struct EeveeSpotify: Tweak {
                     guard let cls = NSClassFromString(SPTPlayerTrackV91LyricsAvailabilityHook.targetName) else {
                         return false
                     }
-                    return class_getInstanceMethod(cls, Selector(("metadata"))) != nil
+                    return class_getInstanceMethod(cls, NSSelectorFromString("metadata")) != nil
                 }()
 
                 if playerTrackMetadataOK {
@@ -430,9 +434,9 @@ struct EeveeSpotify: Tweak {
 
             // Settings integration (guarded)
             if let cls = NSClassFromString("ProfileSettingsSection"),
-               class_getInstanceMethod(cls, Selector(("numberOfRows"))) != nil,
-               class_getInstanceMethod(cls, Selector(("didSelectRow:"))) != nil,
-               class_getInstanceMethod(cls, Selector(("cellForRow:"))) != nil {
+               class_getInstanceMethod(cls, NSSelectorFromString("numberOfRows")) != nil,
+               class_getInstanceMethod(cls, NSSelectorFromString("didSelectRow:")) != nil,
+               class_getInstanceMethod(cls, NSSelectorFromString("cellForRow:")) != nil {
 
                 UniversalSettingsIntegrationProfileGroup().activate()
 
