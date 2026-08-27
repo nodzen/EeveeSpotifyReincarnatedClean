@@ -192,8 +192,7 @@ func eeveeBreadcrumb(_ label: String) {
 }
 
 struct EeveeSpotify: Tweak {
-    static let version = "6.6.8"
-    static let buildNumber = "2"
+    static let version = "6.7.0"
     static let repoSlug = GeneratedConfig.repoSlug
     
     static var hookTarget: VersionHookTarget {
@@ -306,7 +305,7 @@ struct EeveeSpotify: Tweak {
         let iosVersion = UIDevice.current.systemVersion
         let deviceModel = UIDevice.current.model
 
-        writeDebugLog("=== EeveeSpotify \(EeveeSpotify.version) (build \(EeveeSpotify.buildNumber)) starting ===")
+        writeDebugLog("=== EeveeSpotify \(EeveeSpotify.version) starting ===")
         writeDebugLog("[INIT] Spotify: \(spotifyVersion) (build \(spotifyBuild))")
         writeDebugLog("[INIT] iOS: \(iosVersion), Device: \(deviceModel)")
         writeDebugLog("[INIT] Hook target: \(EeveeSpotify.hookTarget)")

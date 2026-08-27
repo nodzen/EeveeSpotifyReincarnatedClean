@@ -10,6 +10,10 @@ private func url(_ value: String) -> URL {
 
 require(url("https://spclient.wg.spotify.com/premium-upsell/banner").isAdRelated,
         "Premium upsell banner endpoint must be blocked")
+require(url("https://spclient.wg.spotify.com/premium-marketing/upsellOffer").isAdRelated,
+        "Premium marketing offer endpoint must be blocked")
+require(url("https://spclient.wg.spotify.com/premium-marketing/upselloffer").isAdRelated,
+        "Premium marketing offer endpoint must be case-insensitive")
 require(url("https://spclient.wg.spotify.com/referrals/upsell/card").isAdRelated,
         "referral upsell card endpoint must be blocked")
 require(url("https://spclient.wg.spotify.com/leavebehind").isAdRelated,

@@ -52,7 +52,7 @@ extension URL {
     }
 
     var isPremiumMarketing: Bool {
-        self.path.contains("premium-marketing/upsellOffer")
+        self.path.lowercased().contains("premium-marketing/upselloffer")
     }
 
     var isPendragonFetchMessageList: Bool {
@@ -66,6 +66,12 @@ extension URL {
     var isAdRelated: Bool {
         let path = self.path.lowercased()
         let host = (self.host ?? "").lowercased()
+
+        // The Premium marketing offer is a JSON upsell, not a regular ad
+        // container. Keep it in the production blocking policy as well.
+        if isPremiumMarketing {
+            return true
+        }
         
         // Block the "Ad on App Open" home-screen banner (Pepsi, etc.)
         if path.contains("/ad-on-app-open") || path.contains("/ads/ad-on-app-open") {
