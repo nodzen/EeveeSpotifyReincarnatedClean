@@ -4,7 +4,7 @@
 
 **Maintainer:** [Nodzen](https://github.com/nodzen) <br />
 **Based on:** [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) <br />
-**Last Update:** `8/24/26` **Spotify Version:** `9.1.74`
+**Last Update:** `8/24/26` **Spotify Version:** `9.1.76`
 
 This is an independent clean fork maintained by [Nodzen](https://github.com/nodzen). It keeps the original project and community contributions while excluding unrelated prank and donation additions.
 
