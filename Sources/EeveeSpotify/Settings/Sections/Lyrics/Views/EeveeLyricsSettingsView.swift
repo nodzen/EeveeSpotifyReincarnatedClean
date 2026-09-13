@@ -2,6 +2,7 @@ import SwiftUI
 
 struct EeveeLyricsSettingsView: View {
     @StateObject var viewModel = EeveeLyricsSettingsViewModel()
+    @State private var karaokeOptions = UserDefaults.karaokeOptions
     
     var body: some View {
         List {
@@ -18,6 +19,10 @@ struct EeveeLyricsSettingsView: View {
                 if viewModel.lyricsSource == .musixmatch {
                     musixmatchLanguageSection()
                 }
+
+                if viewModel.lyricsSource == .spicylyrics {
+                    karaokeAppearanceSection()
+                }
             }
             
             SpacerView()
@@ -28,6 +33,26 @@ struct EeveeLyricsSettingsView: View {
         .listStyle(GroupedListStyle())
         .disabled(viewModel.isRequestingMusixmatchToken)
         .animation(.default, value: viewModel.animationValues)
+        .onChange(of: karaokeOptions) { UserDefaults.karaokeOptions = $0 }
+    }
+
+    @ViewBuilder private func karaokeAppearanceSection() -> some View {
+        Section {
+            Picker("karaoke_alignment".localized, selection: $karaokeOptions.textAlignment) {
+                ForEach(KaraokeTextAlignment.allCases, id: \.self) { alignment in
+                    Text(alignment.displayName).tag(alignment)
+                }
+            }
+
+            Toggle(
+                "karaoke_reversed_direction".localized,
+                isOn: $karaokeOptions.reversedDirection
+            )
+        } header: {
+            Text("karaoke_appearance_title".localized)
+        } footer: {
+            Text("karaoke_reversed_direction_description".localized)
+        }
     }
     
     @ViewBuilder private func geniusFallbackSection() -> some View {

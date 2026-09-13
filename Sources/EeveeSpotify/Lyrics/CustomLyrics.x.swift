@@ -20,6 +20,11 @@ private let petitLyricsRepository = PetitLyricsRepository()
 
 // Overload for 9.1.6 where we only have track ID from URL
 private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
+
+    // Record the request before any network work starts. Karaoke responses
+    // arrive independently and must not let an older track overwrite the
+    // current track's stored syllable data.
+    KaraokeLyricsStore.shared.noteRequestStarted(trackId: trackId)
     
     var source = UserDefaults.lyricsSource
 
@@ -205,6 +210,8 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     let trackTitle = track.trackTitle()
     let artistName = track.artistName()
 
+    KaraokeLyricsStore.shared.noteRequestStarted(trackId: track.trackIdentifier)
+
     let searchQuery = LyricsSearchQuery(
         title: trackTitle,
         primaryArtist: artistName,
@@ -324,6 +331,34 @@ private var prefetchedResult: PrefetchedLyrics?
 // Track ID currently being prefetched, to avoid duplicate background fetches.
 private var prefetchingTrackId: String?
 
+/// Synchronizes the bounded synchronous lyrics fallback without sharing
+/// mutable local variables between the Spotify callback thread and the
+/// background fetch thread.
+private final class LyricsFetchResultBox {
+    private let lock = NSLock()
+    private var value: Lyrics?
+    private var error: Error?
+
+    func store(value: Lyrics) {
+        lock.lock()
+        self.value = value
+        lock.unlock()
+    }
+
+    func store(error: Error) {
+        lock.lock()
+        self.error = error
+        lock.unlock()
+    }
+
+    func load() -> (Lyrics?, Error?) {
+        lock.lock()
+        let result = (value, error)
+        lock.unlock()
+        return result
+    }
+}
+
 /// Kicks off a background lyrics fetch for `trackId` so the result is ready
 /// before Spotify fires its `/color-lyrics/v2` request.
 /// Safe to call multiple times — duplicate calls for the same track are ignored.
@@ -398,6 +433,11 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics
         throw LyricsError.noCurrentTrack
     }
 
+    // The lyrics URL is reliable even on Spotify 9.1 builds where the player
+    // observer hook is unavailable, so use it to keep the karaoke launcher
+    // associated with the actual current track.
+    KaraokePlaybackTracker.shared.updateTrackIdFromLyricsFetch(trackIdentifier)
+
     if capturedTrackId != trackIdentifier {
         capturedTrackTitle = nil
         capturedArtistName = nil
@@ -415,7 +455,32 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics
         return prefetched.data
     }
 
-    var lyrics = try loadCustomLyricsForTrackId(trackIdentifier)
+    // SpicyLyrics can retry a queued response. Keep Spotify's request thread
+    // bounded while allowing the background operation to finish and populate
+    // the karaoke store when possible.
+    let resultBox = LyricsFetchResultBox()
+    let semaphore = DispatchSemaphore(value: 0)
+    DispatchQueue.global(qos: .userInitiated).async {
+        do {
+            resultBox.store(value: try loadCustomLyricsForTrackId(trackIdentifier))
+        } catch {
+            resultBox.store(error: error)
+        }
+        semaphore.signal()
+    }
+
+    guard semaphore.wait(timeout: .now() + 4.0) == .success else {
+        writeDebugLog("[Lyrics] fetch for \(trackIdentifier) exceeded 4s; returning no lyrics")
+        throw LyricsError.noSuchSong
+    }
+
+    let (fetchedLyrics, fetchedError) = resultBox.load()
+    if let fetchedError = fetchedError {
+        throw fetchedError
+    }
+    guard var lyrics = fetchedLyrics else {
+        throw LyricsError.noSuchSong
+    }
     
     let lyricsColorsSettings = UserDefaults.lyricsColors
     

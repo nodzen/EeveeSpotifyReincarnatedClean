@@ -1,5 +1,6 @@
 import Orion
 import UIKit
+import ObjectiveC.runtime
 
 var statefulPlayer: StatefulPlayerImplementation?
 var backgroundViewModel: SPTNowPlayingBackgroundViewModel?
@@ -7,6 +8,40 @@ var scrollDataSource: NowPlayingScrollDataSourceImplementation?
 
 var nowPlayingScrollViewController: NowPlayingScrollViewController?
 var npvScrollViewController: NPVScrollViewController?
+
+/// Runtime inspection used only by the karaoke playback hook to identify the
+/// stable observer surface on each Spotify build. It never invokes discovered
+/// selectors or guesses KVC keys, so a renamed private API fails closed.
+func karaokeDumpClassMethods(_ label: String, of object: AnyObject?) {
+    guard let object = object, let cls = object_getClass(object) else {
+        writeDebugLog("[KaraokeProbe] \(label): object unavailable")
+        return
+    }
+
+    writeDebugLog("[KaraokeProbe] \(label): class=\(NSStringFromClass(cls))")
+
+    var methodCount: UInt32 = 0
+    if let methods = class_copyMethodList(cls, &methodCount) {
+        let names = (0..<Int(methodCount)).map {
+            NSStringFromSelector(method_getName(methods[$0]))
+        }
+        free(methods)
+        writeDebugLog("[KaraokeProbe] \(label): methods=\(names.sorted())")
+    }
+}
+
+func karaokeDumpClassMethods(_ label: String, ofClass cls: AnyClass) {
+    writeDebugLog("[KaraokeProbe] \(label): class=\(NSStringFromClass(cls))")
+
+    var methodCount: UInt32 = 0
+    if let methods = class_copyMethodList(cls, &methodCount) {
+        let names = (0..<Int(methodCount)).map {
+            NSStringFromSelector(method_getName(methods[$0]))
+        }
+        free(methods)
+        writeDebugLog("[KaraokeProbe] \(label): methods=\(names.sorted())")
+    }
+}
 
 class LegacyNowPlayingPlatformSwiftServiceImplementationHook: ClassHook<NSObject> {
     typealias Group = IOS14PremiumPatchingGroup

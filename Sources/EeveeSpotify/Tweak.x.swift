@@ -471,6 +471,7 @@ struct EeveeSpotify: Tweak {
             TrueShuffleHook.install()
             activateEeveeProbes()
             activateSponsorBlock()
+            activateKaraokeHooks()
             return
         }
 
@@ -510,5 +511,6 @@ struct EeveeSpotify: Tweak {
         }
         UniversalSettingsIntegrationNavGroup().activate()
         SettingsIntegrationGroup().activate()
+        activateKaraokeHooks()
     }
 }
