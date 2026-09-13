@@ -300,6 +300,12 @@ struct EeveeSpotify: Tweak {
         // Spotify 9.1.x. Each target is runtime-gated for minor-version safety.
         activateUpsellServiceBlocker()
 
+        // 9.1.x also has an independent app-open ad service, a shared Swift
+        // ads layer and a generic top-banner presenter. These modules can be
+        // loaded lazily, so their blocker retries until the runtime exposes
+        // the compatible classes/selectors.
+        activateModernPromotionBlockers()
+
         // Block upsell components injected into Hub/home JSON (e.g. upgrade banners).
         if let hub = NSClassFromString("HUBViewModelBuilderImplementation"),
            class_getInstanceMethod(hub, NSSelectorFromString("addJSONDictionary:")) != nil {
