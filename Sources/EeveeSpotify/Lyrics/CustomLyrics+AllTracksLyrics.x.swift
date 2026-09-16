@@ -37,17 +37,6 @@ class SPTPlayerTrackHook: ClassHook<NSObject> {
         guard shouldOverrideLocalTrackURI,
               let absoluteString = uri?.absoluteString,
               absoluteString.isLocalTrackIdentifier else {
-
-            // Trigger a background lyrics prefetch as soon as the track URI is
-            // observed — well before Spotify fires its /color-lyrics/v2 request.
-            if let uriString = uri?.absoluteString,
-               uriString.hasPrefix("spotify:track:") {
-                let trackId = uriString.replacingOccurrences(of: "spotify:track:", with: "")
-                if !trackId.isEmpty {
-                    prefetchLyricsIfNeeded(trackId: trackId)
-                }
-            }
-
             return uri
         }
 
@@ -86,11 +75,27 @@ class NPVScrollViewControllerV91Hook: ClassHook<NSObject> {
     typealias Group = V91LyricsGroup
     static var targetName = "NowPlaying_ScrollImpl.NPVScrollViewController"
 
+    func viewDidLoad() {
+        orig.viewDidLoad()
+
+        npvScrollViewController = Dynamic.convert(
+            target,
+            to: NPVScrollViewController.self
+        )
+        writeDebugLog("[NPV] captured modern controller in viewDidLoad")
+    }
+
     func viewWillAppear(_ animated: Bool) {
         shouldOverrideLocalTrackURI = true
         orig.viewWillAppear(animated)
+
+        npvScrollViewController = Dynamic.convert(
+            target,
+            to: NPVScrollViewController.self
+        )
+        writeDebugLog("[NPV] captured modern controller in viewWillAppear")
     }
-    
+
     func viewWillDisappear(_ animated: Bool) {
         shouldOverrideLocalTrackURI = false
         orig.viewWillDisappear(animated)

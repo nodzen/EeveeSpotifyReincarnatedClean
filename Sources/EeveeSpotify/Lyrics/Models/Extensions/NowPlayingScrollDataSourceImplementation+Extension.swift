@@ -1,12 +1,12 @@
 import Orion
 
 extension NowPlayingScrollDataSourceImplementation {
-    var activeProviders: Array<NSObject> {
+    var activeProviders: Array<AnyObject> {
         get {
-            Ivars<Array<NSObject>>(self).activeProviders
+            Ivars<Array<AnyObject>>(self).activeProviders
         }
         set {
-            Ivars<Array<NSObject>>(self).activeProviders = newValue
+            Ivars<Array<AnyObject>>(self).activeProviders = newValue
         }
     }
 }

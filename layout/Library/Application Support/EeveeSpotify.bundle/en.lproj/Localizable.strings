@@ -170,13 +170,14 @@ payment_notice = "EeveeSpotify applies patches to unlock certain Premium feature
 // Debug
 
 debug_title = "Debug";
+debug_file_logging = "Write diagnostic log to file";
 export_debug_log = "Export Debug Log";
 clear_debug_log = "Clear Debug Log";
 debug_log_cleared = "Debug log cleared.";
 debug_log_cleared_ok = "OK";
 no_debug_log_found = "No debug log found. The log starts recording when the app launches.";
 no_debug_log_found_ok = "OK";
-debug_section_footer = "Export or clear the debug log.";
+debug_section_footer = "Enable file logging, then reproduce the issue. Export the log when finished.";
 
 // Full reset
 resetButtonTitle = "Full Reset";

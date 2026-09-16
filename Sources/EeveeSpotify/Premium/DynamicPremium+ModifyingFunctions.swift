@@ -371,18 +371,28 @@ private var propertyReplacements: [EeveePropertyReplacement] {
     EeveePropertyReplacement(name: "enable_sponsored_search_results_v2", modification: .setBool(false)),
     EeveePropertyReplacement(name: "enable_sponsored_home_results_v2", modification: .setBool(false)),
 
-    // 😡😡😡 spotify, stop changing the scroll logic
-    EeveePropertyReplacement(name: "should_nova_scroll_use_scrollsita", modification: .remove),
-
-    // Keep the native control for hiding lyrics beneath the cover visible even
-    // when Spotify's live response omits this optional UI assignment.
+    // Keep the under-cover lyrics surface controlled only by the user's setting.
+    // The custom lyrics payload is also consumed by this Spotify surface, so
+    // replacing lyrics must not disable it or make its visibility depend on
+    // whether Spotify returned its own lyrics first.
     EeveePropertyReplacement(
         name: "lyrics_under_cover_art_enabled",
         scope: "ios-nowplaying-contentlayers-impl",
         modification: .forceBool(!UserDefaults.hideLyricsUnderCoverArt)
     ),
 
+    // Keep the lyrics destination and its NPV entry point available even when
+    // Spotify's native catalog says that the current track has no lyrics.
+    EeveePropertyReplacement(name: "enable_lyrics", scope: "ios-feature-lyrics", modification: .forceBool(true)),
+    EeveePropertyReplacement(name: "enable_all_destinations", scope: "ios-feature-lyrics", modification: .forceBool(true)),
     EeveePropertyReplacement(name: "lyrics_entry_point_enabled", scope: "ios-feature-lyrics", modification: .forceBool(true)),
+    EeveePropertyReplacement(name: "npv_lyrics_entry_point_button", scope: "ios-feature-lyrics", modification: .forceBool(true)),
+    EeveePropertyReplacement(name: "show_lyrics_on_npv", modification: .forceBool(true)),
+    // 9.1.80 otherwise skips the lyrics request when Spotify's own catalog
+    // says that a track has no lyrics. External providers must receive the
+    // request as well, so let the lyrics service ask for every track and let
+    // the replacement/fallback pipeline decide whether usable lines exist.
+    EeveePropertyReplacement(name: "enable_has_lyrics_check_bypass", scope: "ios-feature-lyrics", modification: .forceBool(true)),
     EeveePropertyReplacement(name: "enable_lyrics_share", scope: "ios-feature-lyrics", modification: .forceBool(true)),
     EeveePropertyReplacement(name: "lyrics_share_enabled", scope: "ios-feature-lyrics", modification: .forceBool(true)),
     EeveePropertyReplacement(name: "enable_lyrics_sharing", scope: "ios-feature-lyrics", modification: .forceBool(true)),

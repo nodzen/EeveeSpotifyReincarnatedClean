@@ -154,3 +154,15 @@ play_songs_in_any_order = "Треки в любом порядке";
 organize_listening_queue = "Добавление треков в очередь";
 
 payment_notice = "EeveeSpotify применяет патчи, которые активируют некоторые возможности Premium. Это бесплатно.";
+
+// Debug
+
+debug_title = "Отладка";
+debug_file_logging = "Записывать отладочный лог в файл";
+export_debug_log = "Экспортировать отладочный лог";
+clear_debug_log = "Очистить отладочный лог";
+debug_log_cleared = "Отладочный лог очищен.";
+debug_log_cleared_ok = "ОК";
+no_debug_log_found = "Отладочный лог не найден. Включите запись и воспроизведите проблему.";
+no_debug_log_found_ok = "ОК";
+debug_section_footer = "Включите запись, воспроизведите проблему и экспортируйте лог.";

@@ -73,16 +73,28 @@ cyan -i "$VANILLA_IPA" -o "$OUT_IPA" -f "${INJECT[@]}" -c 9 -m 15.0 -du
 color "6/7  ipapatch LC-inject zxPluginsInject"
 ipapatch --input "$OUT_IPA" --inplace --noconfirm --dylib packages/zxPluginsInject.dylib
 
-# Belt-and-suspenders: cyan -du strips appex/Watch but verify.
-cd "$OUT_DIR"
-rm -rf Payload
-unzip -q "$(basename "$OUT_IPA")"
-if [ -d "Payload/Spotify.app/Watch" ]; then
-    rm -rf Payload/Spotify.app/Watch
-    zip -qry "$(basename "$OUT_IPA")" Payload
+# Belt-and-suspenders: cyan -du normally strips Watch content, but recent
+# Spotify IPAs use com.apple.WatchPlaceholder instead of Watch. Work in /tmp:
+# Finder can recreate metadata inside Outputs/IPAS/Payload while `rm -rf` is
+# walking it, which used to abort the build after an otherwise valid IPA was
+# produced.
+WATCH_TMP="$(mktemp -d "${TMPDIR:-/tmp}/eevee-watch.XXXXXX")"
+unzip -q "$OUT_IPA" -d "$WATCH_TMP"
+STRIPPED_WATCH=0
+for WATCH_PATH in \
+    "$WATCH_TMP/Payload/Spotify.app/Watch" \
+    "$WATCH_TMP/Payload/Spotify.app/com.apple.WatchPlaceholder"; do
+    if [ -e "$WATCH_PATH" ]; then
+        rm -rf "$WATCH_PATH"
+        STRIPPED_WATCH=1
+    fi
+done
+if [ "$STRIPPED_WATCH" -eq 1 ]; then
+    REBUILT_IPA="$WATCH_TMP/rebuilt.ipa"
+    (cd "$WATCH_TMP" && zip -qry "$REBUILT_IPA" Payload)
+    mv -f "$REBUILT_IPA" "$OUT_IPA"
 fi
-rm -rf Payload
-cd - >/dev/null
+rm -rf "$WATCH_TMP"
 
 color "7/7  alternate app icons"
 chmod +x Tools/alt-icons.sh

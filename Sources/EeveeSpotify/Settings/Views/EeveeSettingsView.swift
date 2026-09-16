@@ -7,6 +7,7 @@ struct EeveeSettingsView: View {
     
     @State private var hasShownCommonIssuesTip = UserDefaults.hasShownCommonIssuesTip
     @State private var isClearingData = false
+    @State private var debugLoggingEnabled = UserDefaults.debugLoggingEnabled
 
     private func confirmDestructive(
         title: String,
@@ -147,8 +148,13 @@ struct EeveeSettingsView: View {
             //
 
             Section(header: Text("debug_title".localized), footer: Text("debug_section_footer".localized)) {
+                Toggle(
+                    "debug_file_logging".localized,
+                    isOn: $debugLoggingEnabled
+                )
+
                 Button {
-                    let logPath = NSTemporaryDirectory() + "eeveespotify_debug.log"
+                    let logPath = eeveeDebugLogURL().path
                     guard FileManager.default.fileExists(atPath: logPath),
                           let logData = FileManager.default.contents(atPath: logPath),
                           logData.count > 0 else {
@@ -175,9 +181,11 @@ struct EeveeSettingsView: View {
                 }
                 
                 Button {
-                    let logPath = NSTemporaryDirectory() + "eeveespotify_debug.log"
+                    let logPath = eeveeDebugLogURL().path
                     try? "".write(toFile: logPath, atomically: true, encoding: .utf8)
-                    writeDebugLog("Log cleared by user")
+                    if debugLoggingEnabled {
+                        writeDebugLog("Log cleared by user")
+                    }
                     PopUpHelper.showPopUp(message: "debug_log_cleared".localized, buttonText: "debug_log_cleared_ok".localized)
                 } label: {
                     HStack {
@@ -185,6 +193,12 @@ struct EeveeSettingsView: View {
                         Text("clear_debug_log".localized)
                     }
                     .foregroundColor(.red)
+                }
+            }
+            .onChange(of: debugLoggingEnabled) { enabled in
+                UserDefaults.debugLoggingEnabled = enabled
+                if enabled {
+                    writeDebugLog("File logging enabled by user")
                 }
             }
             

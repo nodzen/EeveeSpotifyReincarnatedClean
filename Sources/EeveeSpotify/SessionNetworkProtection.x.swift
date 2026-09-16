@@ -11,8 +11,22 @@ class URLSessionTaskResumeHook: ClassHook<NSObject> {
 
     func resume() {
         if let task = target as? URLSessionTask,
-           let url = task.currentRequest?.url ?? task.originalRequest?.url,
-           let host = url.host?.lowercased() {
+           let request = task.currentRequest ?? task.originalRequest,
+           let url = request.url {
+
+            // Scrollsita loads in parallel with color-lyrics and does not
+            // consistently include the current entity URI. Capture the exact
+            // track here, before either response can win the race. Reusing the
+            // existing task hook avoids a second swizzle of `resume` on 9.1.x.
+            ScrollsitaLyricsCardPatcher.noteScrollsitaRequest(request)
+            if url.isLyrics {
+                ScrollsitaLyricsCardPatcher.noteLyricsRequest(url)
+            }
+
+            guard let host = url.host?.lowercased() else {
+                orig.resume()
+                return
+            }
 
             let elapsed = Date().timeIntervalSince(tweakInitTime)
             let elapsedInt = Int(elapsed)

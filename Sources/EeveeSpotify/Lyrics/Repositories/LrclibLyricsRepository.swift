@@ -1,106 +1,5 @@
 import Foundation
 
-private class LrclibTLSDelegate: NSObject, URLSessionTaskDelegate {
-    let expectedHost: String
-
-    init(expectedHost: String) {
-        self.expectedHost = expectedHost
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        task: URLSessionTask,
-        didReceive challenge: URLAuthenticationChallenge,
-        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
-    ) {
-        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-              let serverTrust = challenge.protectionSpace.serverTrust else {
-            completionHandler(.performDefaultHandling, nil)
-            return
-        }
-
-        // Build a fresh trust object from the peer's certificate chain, evaluated
-        // against the original hostname. Re-using and mutating the trust object
-        // supplied by URLSession for a raw-IP connection can fail chain building
-        // (errSSLXCertChainInvalid / -9802) even when the certificate is valid.
-        //
-        // SecTrustGetCertificateAtIndex is deprecated in iOS 15 and returns nil on
-        // iOS 16+ / iOS 26+. Use SecTrustCopyCertificateChain where available.
-        //
-        // FIX: SecTrustCopyCertificateChain returns a plain CFTypeRef/CFArray on
-        // iOS 26; the Swift conditional cast `as? [SecCertificate]` can silently
-        // return nil on some OS builds when the bridging isn't automatic.
-        // Use CFArrayGetCount / CFArrayGetValueAtIndex to extract the chain safely.
-        let certChain: [SecCertificate]
-        if #available(iOS 15.0, *) {
-            guard let chainRef = SecTrustCopyCertificateChain(serverTrust) else {
-                completionHandler(.cancelAuthenticationChallenge, nil)
-                return
-            }
-            let count = CFArrayGetCount(chainRef)
-            guard count > 0 else {
-                completionHandler(.cancelAuthenticationChallenge, nil)
-                return
-            }
-            certChain = (0..<count).compactMap { i in
-                CFArrayGetValueAtIndex(chainRef, i)
-                    .map { Unmanaged<SecCertificate>.fromOpaque($0).takeUnretainedValue() }
-            }
-        } else {
-            let count = SecTrustGetCertificateCount(serverTrust)
-            guard count > 0 else {
-                completionHandler(.cancelAuthenticationChallenge, nil)
-                return
-            }
-            certChain = (0..<count).compactMap { SecTrustGetCertificateAtIndex(serverTrust, $0) }
-            guard !certChain.isEmpty else {
-                completionHandler(.cancelAuthenticationChallenge, nil)
-                return
-            }
-        }
-
-        let policy = SecPolicyCreateSSL(true, expectedHost as CFString)
-
-        var freshTrust: SecTrust?
-        guard SecTrustCreateWithCertificates(certChain as CFArray, policy, &freshTrust) == errSecSuccess,
-              let freshTrust else {
-            completionHandler(.cancelAuthenticationChallenge, nil)
-            return
-        }
-
-        var error: CFError?
-        if SecTrustEvaluateWithError(freshTrust, &error) {
-            completionHandler(.useCredential, URLCredential(trust: freshTrust))
-        } else {
-            writeDebugLog("[LRCLIB] TLS validation failed for \(expectedHost): \(String(describing: error))")
-            completionHandler(.cancelAuthenticationChallenge, nil)
-        }
-    }
-}
-
-private func resolveIPv4(_ host: String) -> String? {
-    var hints = addrinfo(
-        ai_flags: 0, ai_family: AF_INET, ai_socktype: SOCK_STREAM,
-        ai_protocol: 0, ai_addrlen: 0, ai_canonname: nil, ai_addr: nil, ai_next: nil
-    )
-    var result: UnsafeMutablePointer<addrinfo>?
-
-    guard getaddrinfo(host, nil, &hints, &result) == 0, let addr = result else {
-        return nil
-    }
-    defer { freeaddrinfo(result) }
-
-    var ipBuffer = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
-    let sockaddrIn = addr.pointee.ai_addr.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0 }
-    var sinAddr = sockaddrIn.pointee.sin_addr
-
-    guard inet_ntop(AF_INET, &sinAddr, &ipBuffer, socklen_t(INET6_ADDRSTRLEN)) != nil else {
-        return nil
-    }
-
-    return String(cString: ipBuffer)
-}
-
 class LrclibLyricsRepository: LyricsRepository {
     var apiUrl: String
     private let session: URLSession
@@ -112,24 +11,15 @@ class LrclibLyricsRepository: LyricsRepository {
         configuration.httpAdditionalHeaders = [
             "User-Agent": "EeveeSpotify v\(EeveeSpotify.version) https://github.com/whoeevee/EeveeSpotify"
         ]
-        // FIX: 4 seconds is far too short — LRCLIB can be slow to respond,
-        // and the IPv4-direct attempt + fallback each consumed the full 4s in
-        // the debug log, causing guaranteed timeouts. Use 10s instead.
-        configuration.timeoutIntervalForRequest = 10
-        configuration.timeoutIntervalForResource = 10
+        // Keep the response inside Spotify's short lyrics-card loading window.
+        // A failed LRCLIB connection falls through to Genius, so it must not
+        // occupy that entire window by itself.
+        configuration.timeoutIntervalForRequest = 6
+        configuration.timeoutIntervalForResource = 6
         configuration.allowsExpensiveNetworkAccess = true
         configuration.allowsConstrainedNetworkAccess = true
         configuration.waitsForConnectivity = false
-
-        if let host = URL(string: apiUrl)?.host {
-            session = URLSession(
-                configuration: configuration,
-                delegate: LrclibTLSDelegate(expectedHost: host),
-                delegateQueue: nil
-            )
-        } else {
-            session = URLSession(configuration: configuration)
-        }
+        session = URLSession(configuration: configuration)
     }
     
     static let originalApiUrl = "https://lrclib.net/api"
@@ -155,19 +45,6 @@ class LrclibLyricsRepository: LyricsRepository {
 
         var request = URLRequest(url: url)
 
-        // Some networks have broken/unroutable IPv6 paths to lrclib.net that cause
-        // ETIMEDOUT at the TCP layer for custom URLSession instances. Resolve to
-        // an IPv4 address explicitly and connect to it directly (TLS hostname
-        // validation against the original host is handled by LrclibTLSDelegate).
-        if let host = url.host, let ip = resolveIPv4(host) {
-            var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-            components?.host = ip
-            if let ipUrl = components?.url {
-                request = URLRequest(url: ipUrl)
-                request.setValue(host, forHTTPHeaderField: "Host")
-            }
-        }
-
         request.setValue(
             "EeveeSpotify v\(EeveeSpotify.version) https://github.com/whoeevee/EeveeSpotify",
             forHTTPHeaderField: "User-Agent"
@@ -176,40 +53,26 @@ class LrclibLyricsRepository: LyricsRepository {
         let semaphore = DispatchSemaphore(value: 0)
         var data: Data?
         var error: Error?
+        var statusCode: Int?
 
-        let task = session.dataTask(with: request) { responseData, _, err in
+        let task = session.dataTask(with: request) { responseData, response, err in
             error = err
             data = responseData
+            statusCode = (response as? HTTPURLResponse)?.statusCode
             semaphore.signal()
         }
 
         task.resume()
         semaphore.wait()
 
-        if error != nil, request.url != url {
-            // IPv4-direct attempt failed; retry with the original hostname URL.
-            writeDebugLog("[LRCLIB] IPv4-direct attempt failed (\(error!)), retrying via hostname")
-
-            let fallbackSemaphore = DispatchSemaphore(value: 0)
-            var fallbackRequest = URLRequest(url: url)
-            fallbackRequest.setValue(
-                "EeveeSpotify v\(EeveeSpotify.version) https://github.com/whoeevee/EeveeSpotify",
-                forHTTPHeaderField: "User-Agent"
-            )
-
-            let fallbackTask = session.dataTask(with: fallbackRequest) { response, _, err in
-                error = err
-                data = response
-                fallbackSemaphore.signal()
-            }
-
-            fallbackTask.resume()
-            fallbackSemaphore.wait()
-        }
-
         if let error = error {
             writeDebugLog("[LRCLIB] Request error for \(stringUrl): \(error)")
             throw error
+        }
+
+        guard let statusCode, (200..<300).contains(statusCode) else {
+            writeDebugLog("[LRCLIB] HTTP \(statusCode ?? -1) for \(stringUrl)")
+            throw LyricsError.noSuchSong
         }
 
         guard let data else {
@@ -237,7 +100,7 @@ class LrclibLyricsRepository: LyricsRepository {
     private func mapSyncedLyricsLines(_ lines: [String]) -> [LyricsLineDto] {
         return lines.compactMap { line in
             guard let match = line.firstMatch(
-                "\\[(?<minute>\\d*):(?<seconds>\\d+\\.\\d+|\\d+)\\] ?(?<content>.*)"
+                "\\[(?<minute>\\d+):(?<seconds>\\d+\\.\\d+|\\d+)\\] ?(?<content>.*)"
             ) else {
                 return nil
             }
@@ -252,9 +115,14 @@ class LrclibLyricsRepository: LyricsRepository {
                 }
             }
             
-            let minute = Int(captures["minute"]!)!
-            let seconds = Float(captures["seconds"]!)!
-            let content = captures["content"]!
+            guard let minuteText = captures["minute"],
+                  let minute = Int(minuteText),
+                  let secondsText = captures["seconds"],
+                  let seconds = Float(secondsText),
+                  let content = captures["content"] else {
+                writeDebugLog("[LRCLIB] Ignoring malformed synchronized line: \(line.prefix(120))")
+                return nil
+            }
             
             return LyricsLineDto(
                 content: content.lyricsNoteIfEmpty,
@@ -284,7 +152,17 @@ class LrclibLyricsRepository: LyricsRepository {
         do {
             song = try getSong(trackName: query.title, artistName: query.primaryArtist)
         } catch {
+            // A network failure will not be fixed by sending the same request
+            // with a stripped title. Let the configured Genius fallback start
+            // immediately instead of spending another full timeout on LRCLIB.
+            if (error as NSError).domain == NSURLErrorDomain {
+                throw error
+            }
+
             let strippedTitle = query.title.strippedTrackTitle
+            guard strippedTitle != query.title else {
+                throw error
+            }
             do {
                 song = try getSong(trackName: strippedTitle, artistName: query.primaryArtist)
             } catch {

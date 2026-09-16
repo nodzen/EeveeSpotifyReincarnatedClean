@@ -58,6 +58,7 @@ enum SpotifyResponsePatcher {
         case planOverview = "PlanOverview"
         case dacEmpty    = "dac"
         case casitaStrip = "casitaStrip"
+        case scrollsitaLyrics = "scrollsitaLyrics"
     }
 
     struct PatchResult {
@@ -100,8 +101,27 @@ enum SpotifyResponsePatcher {
             return PatchResult(data: Data(), tag: .dacEmpty)
         }
         if BrowsitaSectionStripper.shouldHandle(url) {
-            if let stripped = BrowsitaSectionStripper.strip(buffer, url: url) {
+            var candidate = buffer
+            var injectedLyrics = false
+
+            // Spotify 9.1.x omits the lower Lyrics card from its Scrollsita
+            // structure when the catalog has no native lyrics. The external
+            // color-lyrics payload is valid in that case, but has no UI surface
+            // to render into until this structure entry exists.
+            if BaseLyricsGroup.isActive,
+               let injected = ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissing(
+                   candidate,
+                   url: url
+               ) {
+                candidate = injected
+                injectedLyrics = true
+            }
+
+            if let stripped = BrowsitaSectionStripper.strip(candidate, url: url) {
                 return PatchResult(data: stripped, tag: .casitaStrip)
+            }
+            if injectedLyrics {
+                return PatchResult(data: candidate, tag: .scrollsitaLyrics)
             }
             return nil
         }

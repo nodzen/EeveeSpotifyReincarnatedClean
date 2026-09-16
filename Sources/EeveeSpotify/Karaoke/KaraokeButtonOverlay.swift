@@ -250,32 +250,25 @@ final class KaraokeButtonOverlay {
     ]
 
     private static func isNowPlayingScreenCurrentlyVisible(liveVC: UIViewController?) -> Bool {
-        // Old hook-populated path first, in case a future Spotify build
-        // restores the factory method (or this runs on a build where it
-        // still works).
-        if (nowPlayingScrollViewController?.collectionView().window != nil) ||
-           (npvScrollViewController?.collectionView().window != nil) {
+        // A captured controller is already a UIViewController underneath the
+        // lightweight protocol used by the lyrics hooks. Do not call the old
+        // collectionView() protocol accessor here: Spotify 9.1.80 keeps the
+        // NPVScrollViewController class but removed that selector, so the
+        // protocol call becomes an unrecognized-selector crash.
+        if let controller = (nowPlayingScrollViewController as AnyObject?) as? UIViewController,
+           controller.isViewLoaded,
+           controller.view.window != nil {
+            return true
+        }
+        if let controller = (npvScrollViewController as AnyObject?) as? UIViewController,
+           controller.isViewLoaded,
+           controller.view.window != nil {
             return true
         }
 
-        // Deliberately does NOT call .collectionView() on whatever's found
-        // below. An earlier version did, via Dynamic.convert(_, to:
-        // NowPlayingScrollViewController.self) — which force-dispatches the
-        // selector with no existence check — and that crashed in production
-        // with "-[NowPlaying_ScrollImpl.NPVScrollViewController
-        // collectionView]: unrecognized selector sent to instance". The
-        // class name still matches (confirmed via binary inspection, hence
-        // this path finding it at all), but this build's instance doesn't
-        // actually expose a `collectionView` selector to the ObjC runtime —
-        // Spotify evidently reworked that accessor too, not just the
-        // provideScrollViewControllerWithDependencies: factory method that
-        // broke `nowPlayingScrollViewController`/`npvScrollViewController`
-        // in the first place. Rather than chase yet another moving-target
-        // selector name (or guard every call with responds(to:), which
-        // still leaves this fragile to the *next* internal rename), just
-        // check whether the view controller's own `.view` is on screen —
-        // that's plain UIViewController/UIView API, not a Spotify-internal
-        // accessor, so there's nothing here for Spotify to break.
+        // The hierarchy fallback also uses only public UIViewController/UIView
+        // APIs. This remains safe when Spotify renames another private NPV
+        // accessor in a future build.
         guard let liveVC = liveVC else { return false }
         return liveVC.view.window != nil
     }

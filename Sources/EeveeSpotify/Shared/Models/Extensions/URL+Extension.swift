@@ -2,7 +2,7 @@ import Foundation
 
 extension URL {
     var isLyrics: Bool {
-        self.path.contains("color-lyrics/v2")
+        self.path.range(of: "color-lyrics/v2", options: .caseInsensitive) != nil
     }
     
     var isPlanOverview: Bool {

@@ -27,15 +27,32 @@ class ErrorViewControllerHook: ClassHook<UIViewController> {
             controller.collectionView().reloadData()
         }
         else if let controller = npvScrollViewController, let dataSource = scrollDataSource {
-            let lyricsProviderIndex = dataSource.activeProviders.firstIndex {
+            // Spotify 9.1.80's NPV controller no longer implements the old
+            // collectionView selector. The legacy error hook is normally
+            // inactive there, but keep this branch fail-closed in case a
+            // group is activated by another build configuration.
+            let controllerObject: AnyObject = controller
+            let collectionViewSelector = NSSelectorFromString("collectionView")
+            guard let controllerClass = object_getClass(controllerObject),
+                  class_getInstanceMethod(controllerClass, collectionViewSelector) != nil else {
+                writeDebugLog("[Lyrics] skip hide-on-error: NPV controller has no collectionView selector")
+                return
+            }
+
+            guard let lyricsProviderIndex = dataSource.activeProviders.firstIndex(where: {
                 NSStringFromClass(type(of: $0)) == HookTargetNameHelper.lyricsScrollProvider
+            }) else {
+                return
             }
             
             let collectionView = controller.collectionView()
             let dataSource = Ivars<__UIDiffableDataSource>(collectionView.dataSource!)._impl
             
             let itemIdentifiers = dataSource.itemIdentifiers()
-            let lyricsProviderItemIdentifier = itemIdentifiers[lyricsProviderIndex!]
+            guard lyricsProviderIndex < itemIdentifiers.count else {
+                return
+            }
+            let lyricsProviderItemIdentifier = itemIdentifiers[lyricsProviderIndex]
             
             dataSource.deleteItemsWithIdentifiers([lyricsProviderItemIdentifier])
         }

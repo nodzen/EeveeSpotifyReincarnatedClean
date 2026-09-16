@@ -7,6 +7,14 @@ class GeniusLyricsRepository: LyricsRepository {
 
     init() {
         let configuration = URLSessionConfiguration.default
+        // This repository is used as a fallback from the synchronous lyrics
+        // loader. Keep each search/song request bounded so a dead Genius
+        // connection cannot outlive the loader's overall deadline forever.
+        configuration.timeoutIntervalForRequest = 8
+        configuration.timeoutIntervalForResource = 12
+        configuration.waitsForConnectivity = false
+        configuration.allowsExpensiveNetworkAccess = true
+        configuration.allowsConstrainedNetworkAccess = true
         configuration.httpAdditionalHeaders = [
             "X-Genius-iOS-Version": "6.21.0",
             "X-Genius-Logged-Out": "true",

@@ -17,6 +17,7 @@ extension UserDefaults {
     private static let iconNamePrettifyKey = "iconNamePrettify"
     private static let cleanShareLinksKey = "cleanShareLinks"
     private static let blockSpotifyAnalyticsKey = "blockSpotifyAnalytics"
+    private static let debugLoggingEnabledKey = "debugLoggingEnabled"
 
     static var musixmatchToken: String {
         get {
@@ -130,6 +131,17 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: blockSpotifyAnalyticsKey)
+        }
+    }
+
+    /// Enables the file-backed diagnostic log in normal release builds.
+    /// Keep this opt-in because the log may contain track and request metadata.
+    static var debugLoggingEnabled: Bool {
+        get {
+            container.object(forKey: debugLoggingEnabledKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: debugLoggingEnabledKey)
         }
     }
 }

@@ -409,7 +409,8 @@ struct EeveeSpotify: Tweak {
 
                 let npvOK: Bool = {
                     if let cls = NSClassFromString("NowPlaying_ScrollImpl.NPVScrollViewController") {
-                        return class_getInstanceMethod(cls, #selector(UIViewController.viewWillAppear(_:))) != nil
+                        return class_getInstanceMethod(cls, #selector(UIViewController.viewDidLoad)) != nil
+                            && class_getInstanceMethod(cls, #selector(UIViewController.viewWillAppear(_:))) != nil
                             && class_getInstanceMethod(cls, #selector(UIViewController.viewWillDisappear(_:))) != nil
                     }
                     return false
@@ -497,6 +498,7 @@ struct EeveeSpotify: Tweak {
         if UserDefaults.lyricsSource.isReplacingLyrics {
             BaseLyricsGroup().activate()
             LyricsErrorHandlingGroup().activate()
+            LegacyScrollCaptureGroup().activate()
             
             if EeveeSpotify.hookTarget == .latest {
                 ModernLyricsGroup().activate()

@@ -61,6 +61,20 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
             if url.isCustomize, let cached = SpotifyResponsePatcher.cachedCustomizeData {
                 orig.URLSession(session, dataTask: task, didReceiveData: cached)
                 orig.URLSession(session, task: task, didCompleteWithError: nil)
+            } else if url.isLyrics {
+                // A native-missing lyrics response can complete with zero body
+                // bytes. Fetch the external source explicitly instead of
+                // forwarding an empty Spotify response and stopping there.
+                writeDebugLog("[HCUS] lyrics response had no body; starting external fetch path=\(url.path)")
+                DispatchQueue.global(qos: .userInitiated).async { [self] in
+                    let lyricsPayload = (try? getLyricsDataForCurrentTrack(url.path))
+                        ?? emptyLyricsData()
+                        ?? Data()
+                    DispatchQueue.main.async { [self] in
+                        orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
+                        orig.URLSession(session, task: task, didCompleteWithError: nil)
+                    }
+                }
             } else {
                 // Some Spotify builds complete "modified" tasks with 0 body bytes.
                 // We previously forwarded completion only, which can crash callers that
@@ -75,16 +89,20 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
         do {
             if url.isLyrics {
                 let originalLyrics = try? Lyrics(serializedBytes: buffer)
+                writeDebugLog("[HCUS] replacing lyrics body bytes=\(buffer.count) nativeLines=\(originalLyrics?.data.lines.count ?? -1) path=\(url.path)")
 
-                let semaphore = DispatchSemaphore(value: 0)
-                var customLyricsData: Data?
-                DispatchQueue.global(qos: .userInitiated).async {
-                    customLyricsData = try? getLyricsDataForCurrentTrack(url.path, originalLyrics: originalLyrics)
-                    semaphore.signal()
+                DispatchQueue.global(qos: .userInitiated).async { [self] in
+                    let lyricsPayload = (try? getLyricsDataForCurrentTrack(
+                        url.path,
+                        originalLyrics: originalLyrics
+                    ))
+                        ?? emptyLyricsData(originalLyrics: originalLyrics)
+                        ?? Data()
+                    DispatchQueue.main.async { [self] in
+                        orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
+                        orig.URLSession(session, task: task, didCompleteWithError: nil)
+                    }
                 }
-                _ = semaphore.wait(timeout: .now() + .milliseconds(18000))
-                orig.URLSession(session, dataTask: task, didReceiveData: customLyricsData ?? buffer)
-                orig.URLSession(session, task: task, didCompleteWithError: nil)
                 return
             }
 
@@ -109,6 +127,10 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
         didReceiveResponse response: HTTPURLResponse,
         completionHandler handler: @escaping (URLSession.ResponseDisposition) -> Void
     ) {
+        if let url = task.currentRequest?.url, url.isLyrics {
+            ScrollsitaLyricsCardPatcher.noteLyricsRequest(url)
+        }
+
         if let url = task.currentRequest?.url, url.isCustomize, response.statusCode == 304,
            let cached = SpotifyResponsePatcher.cachedCustomizeData {
             guard let synthetic = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "2.0", headerFields: [:]) else {
@@ -136,8 +158,9 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
 
             guard let lyricsData = data,
                   let ok = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "2.0", headerFields: [:]) else {
-                handler(.allow)
-                orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: { _ in })
+                DispatchQueue.main.async { [self] in
+                    orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: handler)
+                }
                 return
             }
 

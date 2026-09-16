@@ -11,7 +11,7 @@ enum EeveeDebug {
     #endif
 
     static var enabled: Bool {
-        buildEnabled || eeveeEnvFlag("EEVEE_DEBUG_RUNTIME")
+        buildEnabled || UserDefaults.debugLoggingEnabled || eeveeEnvFlag("EEVEE_DEBUG_RUNTIME")
     }
 
     static var probesEnabled: Bool {
@@ -39,6 +39,11 @@ func eeveeEnvFlag(_ name: String) -> Bool {
 private let eeveeDebugLogQueue = DispatchQueue(label: "com.eeveespotify.debug-log")
 private let eeveeDebugLogMaximumSize: UInt64 = 512 * 1024
 
+func eeveeDebugLogURL() -> URL {
+    URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("eeveespotify_debug.log")
+}
+
 /// Detailed logs are debug-only, serialized, and capped so concurrent URL
 /// session callbacks cannot corrupt or grow the temporary log indefinitely.
 func writeDebugLog(_ message: String) {
@@ -49,8 +54,7 @@ func writeDebugLog(_ message: String) {
     NSLog("[EeveeSpotify] %@", message)
 
     eeveeDebugLogQueue.async {
-        let logURL = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("eeveespotify_debug.log")
+        let logURL = eeveeDebugLogURL()
         guard let data = logMessage.data(using: .utf8) else { return }
 
         let existingSize = (try? FileManager.default.attributesOfItem(atPath: logURL.path)[.size] as? NSNumber)

@@ -64,17 +64,23 @@ class NowPlayingPlatformSwiftServiceImplementationHook: ClassHook<NSObject> {
 }
 
 class NowPlayingScrollPrivateServiceImplementationHook: ClassHook<NSObject> {
-    typealias Group = BaseLyricsGroup
+    // This service method disappeared from Spotify 9.1.x. Keep the legacy
+    // capture hook out of BaseLyricsGroup so activating the safe common lyrics
+    // hooks on 9.1.x cannot attempt this obsolete selector.
+    typealias Group = LegacyScrollCaptureGroup
     static let targetName = "NowPlaying_ScrollImpl.NowPlayingScrollPrivateServiceImplementation"
     
     func provideScrollViewControllerWithDependencies(_ dependencies: NSObject) -> UIViewController {
         let scrollViewController = orig.provideScrollViewControllerWithDependencies(dependencies)
+        let controllerClass = NSStringFromClass(type(of: scrollViewController))
+        writeDebugLog("[NPV] provided scroll controller=\(controllerClass)")
         
-        if NSStringFromClass(type(of: scrollViewController)) ~= "NowPlayingScrollViewController" {
+        if controllerClass ~= "NowPlayingScrollViewController" {
             nowPlayingScrollViewController = Dynamic.convert(
                 scrollViewController,
                 to: NowPlayingScrollViewController.self
             )
+            writeDebugLog("[NPV] using legacy now-playing scroll controller")
         }
         else {
             scrollDataSource = Ivars<NowPlayingScrollDataSourceImplementation>(target)
@@ -83,6 +89,10 @@ class NowPlayingScrollPrivateServiceImplementationHook: ClassHook<NSObject> {
                 scrollViewController,
                 to: NPVScrollViewController.self
             )
+            let providerClasses = scrollDataSource?.activeProviders.map {
+                NSStringFromClass(type(of: $0))
+            } ?? []
+            writeDebugLog("[NPV] using modern controller providers=\(providerClasses)")
         }
         
         backgroundViewModel = Ivars<SPTNowPlayingBackgroundViewModel>(dependencies)

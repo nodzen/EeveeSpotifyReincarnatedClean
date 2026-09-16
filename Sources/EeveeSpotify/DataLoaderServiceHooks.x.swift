@@ -58,6 +58,25 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             if url.isCustomize, let cached = SpotifyResponsePatcher.cachedCustomizeData {
                 orig.URLSession(session, dataTask: task, didReceiveData: cached)
                 orig.URLSession(session, task: task, didCompleteWithError: nil)
+            } else if url.isLyrics {
+                // Spotify 9.1.x may complete a missing/native-empty lyrics
+                // response without any body. Still fetch our source here;
+                // otherwise tracks without Spotify lyrics never reach LRCLIB
+                // or Genius at all.
+                writeDebugLog("[DL] lyrics response had no body; starting external fetch path=\(url.path)")
+                // Keep Spotify's URLSession delegate queue free while the
+                // provider is doing network I/O. On Liked Songs this queue
+                // also carries track-selection work, so a slow provider can
+                // otherwise look like a frozen app.
+                DispatchQueue.global(qos: .userInitiated).async { [self] in
+                    let lyricsPayload = (try? getLyricsDataForCurrentTrack(url.path))
+                        ?? emptyLyricsData()
+                        ?? Data()
+                    DispatchQueue.main.async { [self] in
+                        orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
+                        orig.URLSession(session, task: task, didCompleteWithError: nil)
+                    }
+                }
             } else {
                 // Some Spotify builds complete "modified" tasks with 0 body bytes.
                 // Forwarding completion only can crash consumers that assume at least
@@ -71,7 +90,9 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         }
 
         do {
-            // Lyrics — async fetch with 18s budget, falls back to Spotify's own response on failure.
+            // Lyrics — async fetch with 18s budget. When replacement is enabled,
+            // do not replay Spotify's original body on failure: that response is
+            // exactly what can reintroduce native lyrics alongside the custom UI.
             //
             // iOS 27 / Spotify 9.1.60 fix: Spotify's URLSession delegate handler for
             // didReceiveData now accesses @MainActor-isolated state. When we call orig.*
@@ -84,20 +105,19 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             // the @MainActor isolation violation entirely.
             if url.isLyrics {
                 let originalLyrics = try? Lyrics(serializedBytes: buffer)
+                writeDebugLog("[DL] replacing lyrics body bytes=\(buffer.count) nativeLines=\(originalLyrics?.data.lines.count ?? -1) path=\(url.path)")
 
-                let semaphore = DispatchSemaphore(value: 0)
-                var customLyricsData: Data?
-
-                DispatchQueue.global(qos: .userInitiated).async {
-                    customLyricsData = try? getLyricsDataForCurrentTrack(url.path, originalLyrics: originalLyrics)
-                    semaphore.signal()
-                }
-
-                _ = semaphore.wait(timeout: .now() + .milliseconds(18000))
-                let lyricsPayload = customLyricsData ?? buffer
-                DispatchQueue.main.async { [self] in
-                    orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
-                    orig.URLSession(session, task: task, didCompleteWithError: nil)
+                DispatchQueue.global(qos: .userInitiated).async { [self] in
+                    let lyricsPayload = (try? getLyricsDataForCurrentTrack(
+                        url.path,
+                        originalLyrics: originalLyrics
+                    ))
+                        ?? emptyLyricsData(originalLyrics: originalLyrics)
+                        ?? Data()
+                    DispatchQueue.main.async { [self] in
+                        orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
+                        orig.URLSession(session, task: task, didCompleteWithError: nil)
+                    }
                 }
                 return
             }
@@ -123,6 +143,10 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         didReceiveResponse response: HTTPURLResponse,
         completionHandler handler: @escaping (URLSession.ResponseDisposition) -> Void
     ) {
+        if let url = task.currentRequest?.url, url.isLyrics {
+            ScrollsitaLyricsCardPatcher.noteLyricsRequest(url)
+        }
+
         if let url = task.currentRequest?.url, url.isCustomize, response.statusCode == 304,
            let cached = SpotifyResponsePatcher.cachedCustomizeData {
             // 304, but our cache holds the already-patched body; force 200 so the
@@ -159,9 +183,13 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
 
             guard let lyricsData = data,
                   let ok = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "2.0", headerFields: [:]) else {
-                // Fetch failed — let Spotify handle the original non-200 response.
-                handler(.allow)
-                orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: { _ in })
+                // Fetch failed — resume Spotify's original response exactly
+                // once. Calling `handler` ourselves and then invoking orig
+                // delivered the same response twice and could leave the task's
+                // internal completion state inconsistent.
+                DispatchQueue.main.async { [self] in
+                    orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: handler)
+                }
                 return
             }
 
