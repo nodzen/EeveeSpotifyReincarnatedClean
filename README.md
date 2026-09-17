@@ -24,7 +24,8 @@ This tweak makes Spotify think you have a Premium subscription, granting free li
 - **Genius**
 
 > [!NOTE]
-> All providers work now
+> Spotify doesn’t display lyrics if Spotify don’t have lyrics itsel
+> I still run into premium ads sometimes; I'll sort it out after the lyrics.
 
 ## How to build an EeveeSpotify IPA using Github actions
 > [!NOTE]
