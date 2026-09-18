@@ -43,6 +43,18 @@ enum ScrollsitaLyricsCardPatcher {
         url.path.lowercased().contains("/scrollsita/v1/scroll")
     }
 
+    /// Resolves the response's own entity before consulting recent global
+    /// context. Scrollsita payloads can contain recommendation URIs for other
+    /// tracks, so the request URL remains the authoritative source.
+    static func responseTrackID(_ data: Data, url: URL) -> String? {
+        guard shouldHandle(url) else { return nil }
+
+        let decodedURL = url.absoluteString.removingPercentEncoding ?? url.absoluteString
+        return embeddedTrackID(in: Array(decodedURL.utf8))
+            ?? recentCurrentTrackID()
+            ?? embeddedTrackID(in: [UInt8](data))
+    }
+
     /// Called as soon as a color-lyrics task is resumed/observed. This gives
     /// the parallel Scrollsita request the exact current track even when its
     /// URL does not expose the entity URI.
@@ -128,9 +140,7 @@ enum ScrollsitaLyricsCardPatcher {
 
         // Prefer request identity over arbitrary entity URIs embedded in card
         // payloads (recommendations and queue sections contain other tracks).
-        let trackID = embeddedTrackID(in: Array((url.absoluteString.removingPercentEncoding ?? url.absoluteString).utf8))
-            ?? recentCurrentTrackID()
-            ?? embeddedTrackID(in: bytes)
+        let trackID = responseTrackID(data, url: url)
 
         guard let trackID = trackID else {
             writeDebugLog("[ScrollsitaLyrics] skipped injection: current track ID unavailable path=\(url.path)")

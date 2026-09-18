@@ -21,6 +21,9 @@ private let petitLyricsRepository = PetitLyricsRepository()
 private let lyricsMetadataLock = NSLock()
 private var lyricsMetadataCache: [String: (title: String, artist: String)] = [:]
 private var lyricsMetadataOrder: [String] = []
+private let lyricsTrackColorLock = NSLock()
+private var lyricsTrackColorCache: [String: UIColor] = [:]
+private var lyricsTrackColorOrder: [String] = []
 
 private func cachedLyricsMetadata(for trackId: String) -> (title: String, artist: String)? {
     lyricsMetadataLock.lock()
@@ -40,6 +43,40 @@ private func storeLyricsMetadata(trackId: String, title: String, artist: String)
         lyricsMetadataCache.removeValue(forKey: expiredTrackId)
     }
     lyricsMetadataLock.unlock()
+}
+
+private func cachedLyricsTrackColor(for trackId: String) -> UIColor? {
+    lyricsTrackColorLock.lock()
+    defer { lyricsTrackColorLock.unlock() }
+    return lyricsTrackColorCache[trackId]
+}
+
+private func storeLyricsTrackColor(trackId: String, color: UIColor) {
+    lyricsTrackColorLock.lock()
+    lyricsTrackColorCache[trackId] = color
+    lyricsTrackColorOrder.removeAll { $0 == trackId }
+    lyricsTrackColorOrder.append(trackId)
+    while lyricsTrackColorOrder.count > 6 {
+        let expiredTrackId = lyricsTrackColorOrder.removeFirst()
+        lyricsTrackColorCache.removeValue(forKey: expiredTrackId)
+    }
+    lyricsTrackColorLock.unlock()
+}
+
+private func extractedTrackColor(_ track: SPTPlayerTrack) -> UIColor? {
+    let selector = NSSelectorFromString("extractedColorHex")
+    guard let object = track as? NSObject,
+          object.responds(to: selector),
+          let rawHex = track.extractedColorHex() else {
+        return nil
+    }
+
+    let hex = rawHex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+    guard hex.count == 6 || hex.count == 8,
+          UInt64(hex, radix: 16) != nil else {
+        return nil
+    }
+    return UIColor(Color(hex: hex))
 }
 
 private final class LyricsMetadataBox {
@@ -76,22 +113,42 @@ private final class LyricsBackgroundColorBox {
     }
 }
 
-private func readLyricsBackgroundColor() -> UIColor? {
-    if Thread.isMainThread {
-        return backgroundViewModel?.color()
+private func readLyricsBackgroundColor(trackId: String) -> UIColor? {
+    if let cached = cachedLyricsTrackColor(for: trackId) {
+        writeDebugLog("[Lyrics] color source=track-cache track=\(trackId)")
+        return cached
     }
 
     let result = LyricsBackgroundColorBox()
+    let work = {
+        if let track = statefulPlayer?.currentTrack(),
+           track.URI().spt_trackIdentifier() == trackId,
+           let color = extractedTrackColor(track) {
+            storeLyricsTrackColor(trackId: trackId, color: color)
+            result.store(color)
+            return
+        }
+
+        result.store(backgroundViewModel?.color())
+    }
+
+    if Thread.isMainThread {
+        work()
+        return result.load()
+    }
+
     let semaphore = DispatchSemaphore(value: 0)
     DispatchQueue.main.async {
-        result.store(backgroundViewModel?.color())
+        work()
         semaphore.signal()
     }
     guard semaphore.wait(timeout: .now() + 0.4) == .success else {
         writeDebugLog("[Lyrics] background-color snapshot timed out")
         return nil
     }
-    return result.load()
+    let color = result.load()
+    writeDebugLog("[Lyrics] color source=\(color == nil ? "unavailable" : "spotify") track=\(trackId)")
+    return color
 }
 
 /// Reads Spotify/MediaPlayer objects on the main queue without ever making the
@@ -105,6 +162,9 @@ private func readLyricsMetadataOnMain(
     let work = {
         if let track = statefulPlayer?.currentTrack(),
            track.URI().spt_trackIdentifier() == trackId {
+            if let color = extractedTrackColor(track) {
+                storeLyricsTrackColor(trackId: trackId, color: color)
+            }
             let title = track.trackTitle()
             let artist = track.artistName()
             if !title.isEmpty, !artist.isEmpty {
@@ -564,6 +624,32 @@ func prefetchLyricsIfNeeded(trackId: String) {
     }
 }
 
+/// Scrollsita creates the lower-card element only once. On Spotify 9.1.80 an
+/// external provider can finish several seconds after that element is built,
+/// and the existing element does not observe the late color-lyrics payload.
+/// Joining the same single-flight lookup before the Scrollsita body is
+/// delivered makes the subsequent card request an immediate cache hit.
+func prepareLyricsForScrollsita(trackId: String) -> Bool {
+    guard UserDefaults.lyricsSource.isReplacingLyrics, !trackId.isEmpty else {
+        return false
+    }
+
+    let path = "/color-lyrics/v2/track/\(trackId)"
+    guard let lyricsURL = URL(string: "https://spclient.wg.spotify.com\(path)"),
+          ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(lyricsURL) else {
+        return false
+    }
+
+    do {
+        _ = try getLyricsDataForCurrentTrack(path, waitTimeout: 8.0)
+        writeDebugLog("[ScrollsitaLyrics] external payload prepared track=\(trackId)")
+        return true
+    } catch {
+        writeDebugLog("[ScrollsitaLyrics] external payload preparation failed track=\(trackId): \(error)")
+        return false
+    }
+}
+
 private func lyricsFetchKey(
     trackId: String,
     source: LyricsSource,
@@ -593,7 +679,11 @@ func emptyLyricsData(originalLyrics: Lyrics? = nil) -> Data? {
     return try? lyrics.serializedData()
 }
 
-func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics? = nil) throws -> Data {
+func getLyricsDataForCurrentTrack(
+    _ originalPath: String,
+    originalLyrics: Lyrics? = nil,
+    waitTimeout: TimeInterval = 18.0
+) throws -> Data {
     // All URLSession hooks schedule this function away from their delegate and
     // UI queues. Fail closed if a future call site violates that contract.
     guard !Thread.isMainThread else {
@@ -648,8 +738,8 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics
         writeDebugLog("[Lyrics] joined existing fetch track=\(trackIdentifier)")
     }
 
-    guard let outcome = acquired.entry.wait(timeout: .now() + 18.0) else {
-        writeDebugLog("[Lyrics] fetch for \(trackIdentifier) exceeded 18s; returning no lyrics")
+    guard let outcome = acquired.entry.wait(timeout: .now() + waitTimeout) else {
+        writeDebugLog("[Lyrics] fetch for \(trackIdentifier) exceeded \(waitTimeout)s; returning no lyrics")
         throw LyricsError.noSuchSong
     }
 
@@ -674,7 +764,7 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics
         if lyricsColorsSettings.useStaticColor {
             color = Color(hex: lyricsColorsSettings.staticColor)
         }
-        else if let uiColor = readLyricsBackgroundColor() {
+        else if let uiColor = readLyricsBackgroundColor(trackId: trackIdentifier) {
             color = Color(uiColor)
                 .normalized(lyricsColorsSettings.normalizationFactor)
         }
