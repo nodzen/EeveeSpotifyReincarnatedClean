@@ -18,7 +18,13 @@ class URLSessionTaskResumeHook: ClassHook<NSObject> {
             // consistently include the current entity URI. Capture the exact
             // track here, before either response can win the race. Reusing the
             // existing task hook avoids a second swizzle of `resume` on 9.1.x.
-            ScrollsitaLyricsCardPatcher.noteScrollsitaRequest(request)
+            if let scrollTrackID = ScrollsitaLyricsCardPatcher.noteScrollsitaRequest(request) {
+                // Scrollsita usually knows the newly-visible track before
+                // Spotify starts its serialized color-lyrics request. Warm the
+                // provider now so a superseded request can hand off directly
+                // to this track without flashing an empty gray card.
+                prefetchLyricsIfNeeded(trackId: scrollTrackID)
+            }
             if url.isLyrics {
                 ScrollsitaLyricsCardPatcher.noteLyricsRequest(url)
                 if let trackID = extractTrackId(from: url.path) {

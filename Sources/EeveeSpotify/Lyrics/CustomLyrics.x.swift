@@ -695,6 +695,56 @@ func prefetchLyricsIfNeeded(trackId: String) {
     }
 }
 
+/// Resolve a payload for the track that replaced an in-flight lyrics request.
+/// Spotify 9.1.80 uses one shared renderer and may expose two Spotify IDs for
+/// the same playable recording. Sending an empty protobuf for the old task
+/// therefore clears the new card and leaves its default gray background. The
+/// Scrollsita request identifies the visible track, whose prefetch normally
+/// already has the provider result waiting in the single-flight coordinator.
+func lyricsDataForLatestTrack(replacing staleURL: URL) -> Data {
+    func fallbackPayload() -> Data {
+        emptyLyricsData(trackIdentifier: ScrollsitaLyricsCardPatcher.currentTrackID())
+            ?? emptyLyricsData()
+            ?? Data()
+    }
+
+    guard !Thread.isMainThread,
+          let staleTrackID = extractTrackId(from: staleURL.path) else {
+        return fallbackPayload()
+    }
+
+    for _ in 0..<3 {
+        // The user can skip forward and immediately back while a provider is
+        // finishing. In that case the original request is current again and
+        // its single-flight result is the right payload; never replace it with
+        // an empty body merely because this function was entered while stale.
+        let targetTrackID = ScrollsitaLyricsCardPatcher.currentTrackID() ?? staleTrackID
+
+        let encodedTrackID = targetTrackID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+            ?? targetTrackID
+        guard let targetURL = URL(
+            string: "https://spclient.wg.spotify.com/color-lyrics/v2/track/\(encodedTrackID)"
+        ) else {
+            return fallbackPayload()
+        }
+
+        let payload = (try? getLyricsDataForCurrentTrack(targetURL.path))
+            ?? emptyLyricsData(trackIdentifier: targetTrackID)
+            ?? Data()
+
+        guard ScrollsitaLyricsCardPatcher.currentTrackID() == targetTrackID else {
+            writeDebugLog("[Lyrics] visible track changed during stale handoff from=\(staleTrackID) attempted=\(targetTrackID)")
+            continue
+        }
+
+        let action = targetTrackID == staleTrackID ? "restored" : "rerouted"
+        writeDebugLog("[Lyrics] \(action) stale response from=\(staleTrackID) to=\(targetTrackID) bytes=\(payload.count)")
+        return payload
+    }
+
+    return fallbackPayload()
+}
+
 private func lyricsFetchKey(
     trackId: String,
     source: LyricsSource,

@@ -167,7 +167,8 @@ require(fields(merchPatchedSections[0])?.contains(where: { $0.number == 5 }) == 
 
 var scrollRequest = URLRequest(url: genericScrollURL)
 scrollRequest.httpBody = string(1, "spotify:track:\(anotherTrackID)")
-ScrollsitaLyricsCardPatcher.noteScrollsitaRequest(scrollRequest)
+require(ScrollsitaLyricsCardPatcher.noteScrollsitaRequest(scrollRequest) == anotherTrackID,
+        "Scrollsita request capture must return the visible track for provider prefetch")
 let scrollRequestOnly = response(sections: [section(id: "queue")])
 guard let requestInjected = ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissing(scrollRequestOnly, url: genericScrollURL),
       let requestLyricsSection = decodedSections(requestInjected)?.first,

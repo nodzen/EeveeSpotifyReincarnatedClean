@@ -72,17 +72,19 @@ enum ScrollsitaLyricsCardPatcher {
     /// from the outgoing URL or protobuf body so the lower card also works
     /// when the user has disabled the independent under-cover lyrics surface
     /// and no color-lyrics request has started yet.
-    static func noteScrollsitaRequest(_ request: URLRequest) {
-        guard let url = request.url, shouldHandle(url) else { return }
+    @discardableResult
+    static func noteScrollsitaRequest(_ request: URLRequest) -> String? {
+        guard let url = request.url, shouldHandle(url) else { return nil }
 
         let decodedURL = url.absoluteString.removingPercentEncoding ?? url.absoluteString
         let trackID = embeddedTrackID(in: Array(decodedURL.utf8))
             ?? request.httpBody.flatMap { embeddedTrackID(in: [UInt8]($0)) }
-        guard let trackID else { return }
+        guard let trackID else { return nil }
 
         contextLock.lock()
         latestScrollsitaRequest = (trackID, Date())
         contextLock.unlock()
+        return trackID
     }
 
     /// A provider lookup may finish after the user has already selected a
@@ -97,6 +99,14 @@ enum ScrollsitaLyricsCardPatcher {
 
         guard let currentTrackID = recentCurrentTrackID() else { return true }
         return responseTrackID == currentTrackID
+    }
+
+    /// The newest track identity observed from either lyrics or Scrollsita.
+    /// Exposed so a response that became stale while its provider was loading
+    /// can be rerouted to the visible track instead of painting an empty gray
+    /// payload over the shared lyrics renderer.
+    static func currentTrackID() -> String? {
+        recentCurrentTrackID()
     }
 
     /// Returns a modified response only when the server omitted the lyrics
