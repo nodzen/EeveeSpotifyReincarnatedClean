@@ -192,7 +192,7 @@ func eeveeBreadcrumb(_ label: String) {
 }
 
 struct EeveeSpotify: Tweak {
-    static let version = "6.7.0"
+    static let version = "6.7.1"
     static let repoSlug = GeneratedConfig.repoSlug
 
     static var spotifyVersion: String {

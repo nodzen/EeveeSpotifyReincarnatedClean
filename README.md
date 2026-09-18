@@ -5,9 +5,22 @@
 **Maintainer:** [Nodzen](https://github.com/nodzen) <br />
 **Project Developer:** [jaydenjcpy](https://github.com/jaydenjcpy) <br />
 **Based on:** [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) <br />
-**Last Update:** `8/24/26` **Spotify Version:** `9.1.76`
+**Release:** `6.7.1` **Last Update:** `9/18/26` **Spotify Version:** `9.1.80`
 
 This is an independent clean fork maintained by [Nodzen](https://github.com/nodzen). It keeps the original project and community contributions while excluding unrelated prank and donation additions.
+
+> [!IMPORTANT]
+> This fork has diverged substantially from the original repository. It is not synchronized commit-for-commit: I selectively port useful upstream changes, and upstream developers are welcome to port useful changes from this fork in the same way.
+
+## Lyrics Status
+
+Custom lyrics on Spotify `9.1.80` are usable — not perfect, but this is already a win.
+
+- **Genius** works especially well for regular, unsynchronized lyrics.
+- **LRCLIB** provides synchronized lyrics and works well when reachable, but may be slow or unavailable without a VPN depending on the network.
+- When LRCLIB cannot be reached, the Genius fallback usually still provides lyrics, but with lower reliability and without synchronization.
+
+Release files may also be shared in Telegram at [@ESRClean](https://t.me/ESRClean) if GitHub distribution is unavailable.
 
 This tweak makes Spotify think you have a Premium subscription, granting free listening, just like Spotilife, and provides some additional features like custom lyrics.
 
@@ -24,8 +37,7 @@ This tweak makes Spotify think you have a Premium subscription, granting free li
 - **Genius**
 
 > [!NOTE]
-> Spotify doesn’t display lyrics if Spotify don’t have lyrics itsel
-> I still run into premium ads sometimes; I'll sort it out after the lyrics.
+> Lyrics support is still being improved, especially when external providers are slow or unavailable.
 
 ## How to build an EeveeSpotify IPA using Github actions
 > [!NOTE]
