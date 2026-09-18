@@ -146,29 +146,15 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 return
             }
 
-            let patchResult = try SpotifyResponsePatcher.patch(url: url, buffer: buffer)
-            let responseData = patchResult?.data ?? buffer
-            if let patchResult {
-                writeDebugLog("[DL] Patched \(patchResult.tag.rawValue)")
-            }
-
-            if BaseLyricsGroup.isActive,
-               let trackID = ScrollsitaLyricsCardPatcher.responseTrackID(buffer, url: url) {
-                writeDebugLog("[DL] Holding Scrollsita response until lyrics are ready track=\(trackID)")
-                DispatchQueue.global(qos: .userInitiated).async { [self] in
-                    let prepared = prepareLyricsForScrollsita(trackId: trackID)
-                    DispatchQueue.main.async { [self] in
-                        orig.URLSession(session, dataTask: task, didReceiveData: responseData)
-                        orig.URLSession(session, task: task, didCompleteWithError: nil)
-                        writeDebugLog("[DL] Delivered Scrollsita response track=\(trackID) prepared=\(prepared)")
-                    }
-                }
+            if let result = try SpotifyResponsePatcher.patch(url: url, buffer: buffer) {
+                writeDebugLog("[DL] Patched \(result.tag.rawValue)")
+                orig.URLSession(session, dataTask: task, didReceiveData: result.data)
+                orig.URLSession(session, task: task, didCompleteWithError: nil)
                 return
             }
-
-            // patch() may return nil, but didReceiveData already suppressed the
-            // original. Replay the selected body or the consumer hangs.
-            orig.URLSession(session, dataTask: task, didReceiveData: responseData)
+            // patch() returned nil but didReceiveData already suppressed the original —
+            // replay the buffer or the consumer hangs (casita/browsita with no ad sections).
+            orig.URLSession(session, dataTask: task, didReceiveData: buffer)
             orig.URLSession(session, task: task, didCompleteWithError: nil)
         } catch {
             orig.URLSession(session, task: task, didCompleteWithError: error)

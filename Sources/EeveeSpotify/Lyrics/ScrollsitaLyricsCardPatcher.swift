@@ -10,14 +10,14 @@ import Foundation
 /// NpvScrollResponse.structure (#1)
 ///   -> NpvScrollStructure.sections (#1, repeated)
 ///      -> Section.lyrics (#5)
-///      -> Section.section_info (#39)
+///      -> Section.section_info (#23 on Spotify 9.1.80)
 ///
 /// The field numbers were verified against Spotify 9.1.80's generated
 /// `Spotify_Scrollsita_V1_*` message implementations. Existing fields remain
 /// byte-for-byte unchanged.
 enum ScrollsitaLyricsCardPatcher {
     private static let lyricsFieldNumber = 5
-    private static let sectionInfoFieldNumber = 39
+    private static let sectionInfoFieldNumber = 23
 
     private struct WireField {
         let number: Int
@@ -148,19 +148,23 @@ enum ScrollsitaLyricsCardPatcher {
         }
 
         let trackURI = "spotify:track:\(trackID)"
+        let sectionURI = "spotify:section:\(trackID)"
 
         let template = loadNativeLyricsSection()
         let section: [UInt8]
         if let template,
-           let rewritten = lyricsSection(from: [UInt8](template), trackURI: trackURI) {
+           let rewritten = lyricsSection(
+               from: [UInt8](template),
+               trackURI: trackURI,
+               sectionURI: sectionURI
+           ) {
             section = rewritten
         } else {
-            // Cold-start fallback before Spotify has supplied a native lyrics
-            // section we can clone. `lyrics` is Spotify's canonical section ID;
-            // custom per-track IDs are not accepted by every 9.1.x element
-            // factory even though the protobuf itself parses successfully.
+            // Match 9.1.80's native shape. A per-track section URI is required:
+            // reusing the cached template's identifier makes the diffable data
+            // source treat a new injected card as the previous track's item.
             var sectionInfo = [UInt8]()
-            appendStringField(number: 1, value: "lyrics", to: &sectionInfo)
+            appendStringField(number: 1, value: sectionURI, to: &sectionInfo)
 
             var lyrics = [UInt8]()
             appendStringField(number: 1, value: trackURI, to: &lyrics)
@@ -200,7 +204,7 @@ enum ScrollsitaLyricsCardPatcher {
         result.append(contentsOf: newStructure)
         result.append(contentsOf: bytes[structureField.fieldEnd...])
 
-        writeDebugLog("[ScrollsitaLyrics] injected lower lyrics card schema=lyrics#5/info#39 track=\(trackID) index=\(preferredIndex) template=\(template != nil) \(data.count)->\(result.count)")
+        writeDebugLog("[ScrollsitaLyrics] injected lower lyrics card schema=lyrics#5/info#23 uniqueSection=true track=\(trackID) index=\(preferredIndex) template=\(template != nil) \(data.count)->\(result.count)")
         return Data(result)
     }
 
@@ -260,7 +264,11 @@ enum ScrollsitaLyricsCardPatcher {
         return index
     }
 
-    private static func lyricsSection(from template: [UInt8], trackURI: String) -> [UInt8]? {
+    private static func lyricsSection(
+        from template: [UInt8],
+        trackURI: String,
+        sectionURI: String
+    ) -> [UInt8]? {
         guard let fields = parseFields(template, in: 0..<template.count),
               let lyricsField = fields.first(where: {
                   $0.number == lyricsFieldNumber && $0.wireType == 2
@@ -276,10 +284,33 @@ enum ScrollsitaLyricsCardPatcher {
             payload: Array(trackURI.utf8)
         ) else { return nil }
 
-        return replacingLengthDelimitedField(
+        guard let rewrittenSection = replacingLengthDelimitedField(
             in: template,
             number: lyricsFieldNumber,
             payload: rewrittenLyrics
+        ),
+              let rewrittenFields = parseFields(
+                  rewrittenSection,
+                  in: 0..<rewrittenSection.count
+              ),
+              let sectionInfoField = rewrittenFields.first(where: {
+                  ($0.number == sectionInfoFieldNumber || $0.number == 39)
+                      && $0.wireType == 2
+              }),
+              let sectionInfoStart = sectionInfoField.payloadStart,
+              let sectionInfoEnd = sectionInfoField.payloadEnd,
+              let rewrittenInfo = replacingLengthDelimitedField(
+                  in: Array(rewrittenSection[sectionInfoStart..<sectionInfoEnd]),
+                  number: 1,
+                  payload: Array(sectionURI.utf8)
+              ) else {
+            return nil
+        }
+
+        return replacingLengthDelimitedField(
+            in: rewrittenSection,
+            number: sectionInfoField.number,
+            payload: rewrittenInfo
         )
     }
 
