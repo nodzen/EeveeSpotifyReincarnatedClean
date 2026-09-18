@@ -98,20 +98,66 @@ class GeniusLyricsRepository: LyricsRepository {
     ) -> GeniusHitResult {
         let results = hits.map { $0.result }
 
-        let matchingByTitle = results.filter {
+        // Genius search also returns localized/translated pages. They often
+        // have the same title but are attributed to e.g. "Genius Russian
+        // Translations", so title-only selection can show a translation for
+        // an ordinary track. Keep those pages out of the normal pool; the
+        // romanization switch has its own explicit selection below.
+        let normalResults = results.filter { result in
+            let artist = result.artistNames.lowercased()
+            let title = result.title.lowercased()
+            let isTranslationArtist = artist.contains("genius") && (
+                artist.contains("translation")
+                    || artist.contains("перевод")
+                    || artist.contains("tradu")
+                    || artist.contains("traduzione")
+                    || artist.contains("tłumac")
+            )
+            let isRomanizationArtist = artist.contains("genius")
+                && artist.contains("romanization")
+            let isTranslationTitle = title.contains("translation")
+                || title.contains("перевод")
+                || title.contains("traducción")
+                || title.contains("traducao")
+                || title.contains("traduzione")
+                || title.contains("tłumaczenie")
+            return !isTranslationArtist
+                && !isTranslationTitle
+                && (romanized || !isRomanizationArtist)
+        }
+
+        // Spotify sends a comma-separated artist list for collaborations,
+        // while Genius commonly indexes only the primary artist. Matching the
+        // complete string misses the original page and lets a translation win
+        // as the first title-only result (Cracks is one such case).
+        let artistParts = primaryArtist
+            .replacingOccurrences(of: " featuring ", with: ",", options: .caseInsensitive)
+            .replacingOccurrences(of: " feat. ", with: ",", options: .caseInsensitive)
+            .replacingOccurrences(of: " feat ", with: ",", options: .caseInsensitive)
+            .replacingOccurrences(of: " ft. ", with: ",", options: .caseInsensitive)
+            .components(separatedBy: CharacterSet(charactersIn: ",&/"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        func matchesAnArtist(_ result: GeniusHitResult) -> Bool {
+            artistParts.contains { result.artistNames.containsInsensitive($0) }
+        }
+
+        let matchingByTitle = normalResults.filter {
             $0.title.containsInsensitive(strippedTitle)
         }
 
         let strippedArtist = primaryArtist.strippedTrackTitle
         let matchingByBoth = matchingByTitle.filter {
-            $0.artistNames.containsInsensitive(strippedArtist)
+            matchesAnArtist($0)
+                || $0.artistNames.containsInsensitive(strippedArtist)
                 || $0.artistNames.containsInsensitive(primaryArtist)
         }
 
         // Best match: title+artist → title only → first result
         let pool = !matchingByBoth.isEmpty ? matchingByBoth
                  : !matchingByTitle.isEmpty ? matchingByTitle
-                 : results
+                 : normalResults.isEmpty ? results : normalResults
 
         if romanized, let romanizedSong = pool.first(
             where: { $0.artistNames == "Genius Romanizations" }
@@ -120,7 +166,9 @@ class GeniusLyricsRepository: LyricsRepository {
             return romanizedSong
         }
 
-        return pool.first!
+        let selected = pool.first!
+        writeDebugLog("[Genius] selected id=\(selected.id) title=\(selected.title) artist=\(selected.artistNames) romanized=\(romanized)")
+        return selected
     }
     
     private func mapLyricsLines(_ rawLines: [String]) -> [String] {

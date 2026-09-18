@@ -11,11 +11,12 @@ class LrclibLyricsRepository: LyricsRepository {
         configuration.httpAdditionalHeaders = [
             "User-Agent": "EeveeSpotify v\(EeveeSpotify.version) https://github.com/whoeevee/EeveeSpotify"
         ]
-        // Keep the response inside Spotify's short lyrics-card loading window.
-        // A failed LRCLIB connection falls through to Genius, so it must not
-        // occupy that entire window by itself.
-        configuration.timeoutIntervalForRequest = 6
-        configuration.timeoutIntervalForResource = 6
+        // LRCLIB is unreachable on some networks (including the user's
+        // Russian route) and otherwise holds the Spotify lyrics response for
+        // the full timeout before Genius fallback can run. Keep this short so
+        // the fallback provider can still populate the card in time.
+        configuration.timeoutIntervalForRequest = 3
+        configuration.timeoutIntervalForResource = 4
         configuration.allowsExpensiveNetworkAccess = true
         configuration.allowsConstrainedNetworkAccess = true
         configuration.waitsForConnectivity = false

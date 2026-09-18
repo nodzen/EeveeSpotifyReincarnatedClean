@@ -191,8 +191,56 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         // holding the URLSession completion handler open — URLSession won't
         // proceed until we call handler(.allow/.cancel), so we have time to fetch
         // and then deliver everything ourselves.
-        guard let url = task.currentRequest?.url, url.isLyrics, response.statusCode != 200 else {
+        guard BaseLyricsGroup.isActive,
+              let url = task.currentRequest?.url,
+              url.isLyrics else {
             orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: handler)
+            return
+        }
+
+        // Spotify 9.1.80 can return native lyrics with HTTP 200 even when
+        // replacement is enabled. Delivering our body after the native
+        // response has already been opened leaves the lower card stale until
+        // it is reopened, so hold the response until the custom payload is
+        // ready.
+        if response.statusCode == 200 {
+            writeDebugLog("[DL] Holding native 200 lyrics response (taskId=\(task.taskIdentifier))")
+
+            DispatchQueue.global(qos: .userInitiated).async { [self] in
+                guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
+                    DispatchQueue.main.async {
+                        writeDebugLog("[DL] Cancelled stale native 200 lyrics task track=\(extractTrackId(from: url.path) ?? "unknown")")
+                        handler(.cancel)
+                    }
+                    return
+                }
+
+                let lyricsData = (try? getLyricsDataForCurrentTrack(url.path))
+                    ?? emptyLyricsData()
+                    ?? Data()
+
+                DispatchQueue.main.async { [self] in
+                    guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
+                        writeDebugLog("[DL] Dropped stale native 200 lyrics response track=\(extractTrackId(from: url.path) ?? "unknown")")
+                        handler(.cancel)
+                        return
+                    }
+                    guard let synthetic = HTTPURLResponse(
+                        url: url,
+                        statusCode: 200,
+                        httpVersion: "2.0",
+                        headerFields: [:]
+                    ) else {
+                        handler(.cancel)
+                        return
+                    }
+
+                    SpotifyResponsePatcher.markSyntheticLyricsTask(task)
+                    orig.URLSession(session, dataTask: task, didReceiveResponse: synthetic, completionHandler: handler)
+                    orig.URLSession(session, dataTask: task, didReceiveData: lyricsData)
+                    writeDebugLog("[DL] Delivered external lyrics body for native 200 task=\(task.taskIdentifier)")
+                }
+            }
             return
         }
 
