@@ -69,10 +69,22 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 // also carries track-selection work, so a slow provider can
                 // otherwise look like a frozen app.
                 DispatchQueue.global(qos: .userInitiated).async { [self] in
+                    guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
+                        DispatchQueue.main.async { [self] in
+                            writeDebugLog("[DL] Cancelled stale empty-body lyrics task track=\(extractTrackId(from: url.path) ?? "unknown")")
+                            orig.URLSession(session, task: task, didCompleteWithError: URLError(.cancelled))
+                        }
+                        return
+                    }
                     let lyricsPayload = (try? getLyricsDataForCurrentTrack(url.path))
                         ?? emptyLyricsData()
                         ?? Data()
                     DispatchQueue.main.async { [self] in
+                        guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
+                            writeDebugLog("[DL] Dropped stale empty-body lyrics response track=\(extractTrackId(from: url.path) ?? "unknown")")
+                            orig.URLSession(session, task: task, didCompleteWithError: URLError(.cancelled))
+                            return
+                        }
                         orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
                         orig.URLSession(session, task: task, didCompleteWithError: nil)
                     }
@@ -108,6 +120,13 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 writeDebugLog("[DL] replacing lyrics body bytes=\(buffer.count) nativeLines=\(originalLyrics?.data.lines.count ?? -1) path=\(url.path)")
 
                 DispatchQueue.global(qos: .userInitiated).async { [self] in
+                    guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
+                        DispatchQueue.main.async { [self] in
+                            writeDebugLog("[DL] Cancelled stale buffered lyrics task track=\(extractTrackId(from: url.path) ?? "unknown")")
+                            orig.URLSession(session, task: task, didCompleteWithError: URLError(.cancelled))
+                        }
+                        return
+                    }
                     let lyricsPayload = (try? getLyricsDataForCurrentTrack(
                         url.path,
                         originalLyrics: originalLyrics
@@ -115,6 +134,11 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                         ?? emptyLyricsData(originalLyrics: originalLyrics)
                         ?? Data()
                     DispatchQueue.main.async { [self] in
+                        guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
+                            writeDebugLog("[DL] Dropped stale buffered lyrics response track=\(extractTrackId(from: url.path) ?? "unknown")")
+                            orig.URLSession(session, task: task, didCompleteWithError: URLError(.cancelled))
+                            return
+                        }
                         orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
                         orig.URLSession(session, task: task, didCompleteWithError: nil)
                     }
@@ -143,10 +167,6 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         didReceiveResponse response: HTTPURLResponse,
         completionHandler handler: @escaping (URLSession.ResponseDisposition) -> Void
     ) {
-        if let url = task.currentRequest?.url, url.isLyrics {
-            ScrollsitaLyricsCardPatcher.noteLyricsRequest(url)
-        }
-
         if let url = task.currentRequest?.url, url.isCustomize, response.statusCode == 304,
            let cached = SpotifyResponsePatcher.cachedCustomizeData {
             // 304, but our cache holds the already-patched body; force 200 so the
@@ -179,6 +199,13 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         writeDebugLog("[DL] Replacing lyrics HTTP \(response.statusCode) (taskId=\(task.taskIdentifier))")
 
         DispatchQueue.global(qos: .userInitiated).async { [self] in
+            guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
+                DispatchQueue.main.async {
+                    writeDebugLog("[DL] Cancelled stale HTTP lyrics task track=\(extractTrackId(from: url.path) ?? "unknown")")
+                    handler(.cancel)
+                }
+                return
+            }
             let data = try? getLyricsDataForCurrentTrack(url.path)
 
             guard let lyricsData = data,
@@ -188,12 +215,22 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 // delivered the same response twice and could leave the task's
                 // internal completion state inconsistent.
                 DispatchQueue.main.async { [self] in
+                    guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
+                        writeDebugLog("[DL] Cancelled stale failed lyrics task track=\(extractTrackId(from: url.path) ?? "unknown")")
+                        handler(.cancel)
+                        return
+                    }
                     orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: handler)
                 }
                 return
             }
 
             DispatchQueue.main.async { [self] in
+                guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
+                    writeDebugLog("[DL] Dropped stale lyrics response track=\(extractTrackId(from: url.path) ?? "unknown")")
+                    handler(.cancel)
+                    return
+                }
                 SpotifyResponsePatcher.markSyntheticLyricsTask(task)
                 orig.URLSession(session, dataTask: task, didReceiveResponse: ok, completionHandler: handler)
                 orig.URLSession(session, dataTask: task, didReceiveData: lyricsData)

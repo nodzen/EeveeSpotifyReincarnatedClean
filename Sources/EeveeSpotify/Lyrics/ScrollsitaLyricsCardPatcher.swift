@@ -30,11 +30,17 @@ enum ScrollsitaLyricsCardPatcher {
     }
 
     private static let contextLock = NSLock()
-    private static var latestLyricsTrack: (id: String, timestamp: Date)?
+    private static var latestLyricsRequest: (id: String, timestamp: Date)?
+    private static var latestScrollsitaRequest: (id: String, timestamp: Date)?
+    private static var nativeLyricsSectionTemplate: Data?
+    private static var nativeLyricsSectionIndex: Int?
+    private static let nativeTemplateDefaultsKey = "eevee.scrollsita.nativeLyricsSection.9180"
+    private static let nativeIndexDefaultsKey = "eevee.scrollsita.nativeLyricsSectionIndex.9180"
+    private static let currentTrackLifetime: TimeInterval = 45
     private static let spotifyTrackPrefix = Array("spotify:track:".utf8)
 
     static func shouldHandle(_ url: URL) -> Bool {
-        url.path.lowercased().contains("/scrollsita/")
+        url.path.lowercased().contains("/scrollsita/v1/scroll")
     }
 
     /// Called as soon as a color-lyrics task is resumed/observed. This gives
@@ -45,7 +51,9 @@ enum ScrollsitaLyricsCardPatcher {
             return
         }
 
-        storeTrackID(trackID)
+        contextLock.lock()
+        latestLyricsRequest = (trackID, Date())
+        contextLock.unlock()
     }
 
     /// Spotify 9.1.80's `ScrollsitaRequest` carries `entityUri`. Capture it
@@ -60,15 +68,23 @@ enum ScrollsitaLyricsCardPatcher {
             ?? request.httpBody.flatMap { embeddedTrackID(in: [UInt8]($0)) }
         guard let trackID else { return }
 
-        storeTrackID(trackID)
+        contextLock.lock()
+        latestScrollsitaRequest = (trackID, Date())
+        contextLock.unlock()
     }
 
-    private static func storeTrackID(_ trackID: String) {
-        guard isSpotifyTrackID(trackID) else { return }
+    /// A provider lookup may finish after the user has already selected a
+    /// different track. Spotify 9.1.x reuses its lyrics element during that
+    /// transition, so delivering the old task can paint the previous lyrics
+    /// into the new card. Compare the task URI with the newest request that was
+    /// actually started and fail open only when no recent track context exists.
+    static func shouldDeliverLyricsResponse(_ url: URL) -> Bool {
+        guard url.isLyrics, let responseTrackID = trackIDFromLyricsPath(url.path) else {
+            return true
+        }
 
-        contextLock.lock()
-        latestLyricsTrack = (trackID, Date())
-        contextLock.unlock()
+        guard let currentTrackID = recentCurrentTrackID() else { return true }
+        return responseTrackID == currentTrackID
     }
 
     /// Returns a modified response only when the server omitted the lyrics
@@ -89,7 +105,11 @@ enum ScrollsitaLyricsCardPatcher {
             return nil
         }
 
-        for sectionField in structureFields where sectionField.number == 1 && sectionField.wireType == 2 {
+        let sectionFields = structureFields.filter {
+            $0.number == 1 && $0.wireType == 2
+        }
+
+        for (sectionIndex, sectionField) in sectionFields.enumerated() {
             guard let sectionStart = sectionField.payloadStart,
                   let sectionEnd = sectionField.payloadEnd,
                   let sectionFields = parseFields(bytes, in: sectionStart..<sectionEnd)
@@ -98,14 +118,19 @@ enum ScrollsitaLyricsCardPatcher {
             if sectionFields.contains(where: {
                 $0.number == lyricsFieldNumber && $0.wireType == 2
             }) {
-                writeDebugLog("[ScrollsitaLyrics] native lyrics section already present path=\(url.path)")
+                let nativeSection = Data(bytes[sectionStart..<sectionEnd])
+                cacheNativeLyricsSection(nativeSection, index: sectionIndex)
+                let shape = sectionFields.map { "\($0.number):\($0.wireType)" }.joined(separator: ",")
+                writeDebugLog("[ScrollsitaLyrics] native lyrics section index=\(sectionIndex) fields=[\(shape)] bytes=\(nativeSection.base64EncodedString()) path=\(url.path)")
                 return nil
             }
         }
 
-        let trackID = embeddedTrackID(in: bytes)
-            ?? embeddedTrackID(in: Array((url.absoluteString.removingPercentEncoding ?? url.absoluteString).utf8))
-            ?? recentLyricsTrackID()
+        // Prefer request identity over arbitrary entity URIs embedded in card
+        // payloads (recommendations and queue sections contain other tracks).
+        let trackID = embeddedTrackID(in: Array((url.absoluteString.removingPercentEncoding ?? url.absoluteString).utf8))
+            ?? recentCurrentTrackID()
+            ?? embeddedTrackID(in: bytes)
 
         guard let trackID = trackID else {
             writeDebugLog("[ScrollsitaLyrics] skipped injection: current track ID unavailable path=\(url.path)")
@@ -114,25 +139,50 @@ enum ScrollsitaLyricsCardPatcher {
 
         let trackURI = "spotify:track:\(trackID)"
 
-        // SectionInfo.section_id (#1). Keep it stable for this track so the
-        // diffable data source sees one deterministic card identifier.
-        var sectionInfo = [UInt8]()
-        appendStringField(number: 1, value: "eevee-lyrics-\(trackID)", to: &sectionInfo)
+        let template = loadNativeLyricsSection()
+        let section: [UInt8]
+        if let template,
+           let rewritten = lyricsSection(from: [UInt8](template), trackURI: trackURI) {
+            section = rewritten
+        } else {
+            // Cold-start fallback before Spotify has supplied a native lyrics
+            // section we can clone. `lyrics` is Spotify's canonical section ID;
+            // custom per-track IDs are not accepted by every 9.1.x element
+            // factory even though the protobuf itself parses successfully.
+            var sectionInfo = [UInt8]()
+            appendStringField(number: 1, value: "lyrics", to: &sectionInfo)
 
-        // Lyrics.entity_uri (#1).
-        var lyrics = [UInt8]()
-        appendStringField(number: 1, value: trackURI, to: &lyrics)
+            var lyrics = [UInt8]()
+            appendStringField(number: 1, value: trackURI, to: &lyrics)
 
-        // Spotify 9.1.80 models the section body as a oneof. Lyrics is case
-        // field #5; field #6 is merch. SectionInfo is the separate field #39.
-        var section = [UInt8]()
-        appendMessageField(number: lyricsFieldNumber, payload: lyrics, to: &section)
-        appendMessageField(number: sectionInfoFieldNumber, payload: sectionInfo, to: &section)
+            var fallbackSection = [UInt8]()
+            appendMessageField(number: lyricsFieldNumber, payload: lyrics, to: &fallbackSection)
+            appendMessageField(number: sectionInfoFieldNumber, payload: sectionInfo, to: &fallbackSection)
+            section = fallbackSection
+        }
 
-        // Append one NpvScrollStructure.sections (#1) entry, preserving every
-        // server-provided section and its ordering.
+        // The native lyrics card is near the beginning of the NPV section
+        // list. Appending it after queue/recommendation terminal sections makes
+        // Spotify's element factory silently ignore it. Reuse the last observed
+        // native index, or position it first on a cold start.
+        let preferredIndex = min(loadNativeLyricsSectionIndex() ?? 0, sectionFields.count)
+        let insertionOffset: Int
+        if preferredIndex < sectionFields.count {
+            insertionOffset = sectionFields[preferredIndex].fieldStart - structureStart
+        } else if let lastSection = sectionFields.last {
+            insertionOffset = lastSection.fieldEnd - structureStart
+        } else {
+            insertionOffset = newStructureInsertionOffset(
+                structureFields: structureFields,
+                structureStart: structureStart,
+                structureEnd: structureEnd
+            )
+        }
+
         var newStructure = Array(bytes[structureStart..<structureEnd])
-        appendMessageField(number: 1, payload: section, to: &newStructure)
+        var encodedSection = [UInt8]()
+        appendMessageField(number: 1, payload: section, to: &encodedSection)
+        newStructure.insert(contentsOf: encodedSection, at: insertionOffset)
 
         guard let lengthStart = structureField.lengthStart else { return nil }
         var result = Array(bytes[..<lengthStart])
@@ -140,19 +190,114 @@ enum ScrollsitaLyricsCardPatcher {
         result.append(contentsOf: newStructure)
         result.append(contentsOf: bytes[structureField.fieldEnd...])
 
-        writeDebugLog("[ScrollsitaLyrics] injected lower lyrics card schema=lyrics#5/info#39 track=\(trackID) \(data.count)->\(result.count)")
+        writeDebugLog("[ScrollsitaLyrics] injected lower lyrics card schema=lyrics#5/info#39 track=\(trackID) index=\(preferredIndex) template=\(template != nil) \(data.count)->\(result.count)")
         return Data(result)
     }
 
-    private static func recentLyricsTrackID() -> String? {
+    private static func recentCurrentTrackID() -> String? {
         contextLock.lock()
         defer { contextLock.unlock() }
 
-        guard let context = latestLyricsTrack,
-              Date().timeIntervalSince(context.timestamp) <= 15 else {
+        let contexts = [latestLyricsRequest, latestScrollsitaRequest].compactMap { $0 }
+        guard let context = contexts.max(by: { $0.timestamp < $1.timestamp }),
+              Date().timeIntervalSince(context.timestamp) <= currentTrackLifetime else { return nil }
+        return context.id
+    }
+
+    private static func cacheNativeLyricsSection(_ section: Data, index: Int) {
+        contextLock.lock()
+        nativeLyricsSectionTemplate = section
+        nativeLyricsSectionIndex = index
+        contextLock.unlock()
+
+        UserDefaults.standard.set(section, forKey: nativeTemplateDefaultsKey)
+        UserDefaults.standard.set(index, forKey: nativeIndexDefaultsKey)
+    }
+
+    private static func loadNativeLyricsSection() -> Data? {
+        contextLock.lock()
+        if let section = nativeLyricsSectionTemplate {
+            contextLock.unlock()
+            return section
+        }
+        contextLock.unlock()
+
+        guard let section = UserDefaults.standard.data(forKey: nativeTemplateDefaultsKey) else {
             return nil
         }
-        return context.id
+
+        contextLock.lock()
+        nativeLyricsSectionTemplate = section
+        contextLock.unlock()
+        return section
+    }
+
+    private static func loadNativeLyricsSectionIndex() -> Int? {
+        contextLock.lock()
+        if let index = nativeLyricsSectionIndex {
+            contextLock.unlock()
+            return index
+        }
+        contextLock.unlock()
+
+        guard UserDefaults.standard.object(forKey: nativeIndexDefaultsKey) != nil else {
+            return nil
+        }
+        let index = max(0, UserDefaults.standard.integer(forKey: nativeIndexDefaultsKey))
+        contextLock.lock()
+        nativeLyricsSectionIndex = index
+        contextLock.unlock()
+        return index
+    }
+
+    private static func lyricsSection(from template: [UInt8], trackURI: String) -> [UInt8]? {
+        guard let fields = parseFields(template, in: 0..<template.count),
+              let lyricsField = fields.first(where: {
+                  $0.number == lyricsFieldNumber && $0.wireType == 2
+              }),
+              let lyricsStart = lyricsField.payloadStart,
+              let lyricsEnd = lyricsField.payloadEnd
+        else { return nil }
+
+        let lyricsPayload = Array(template[lyricsStart..<lyricsEnd])
+        guard let rewrittenLyrics = replacingLengthDelimitedField(
+            in: lyricsPayload,
+            number: 1,
+            payload: Array(trackURI.utf8)
+        ) else { return nil }
+
+        return replacingLengthDelimitedField(
+            in: template,
+            number: lyricsFieldNumber,
+            payload: rewrittenLyrics
+        )
+    }
+
+    private static func replacingLengthDelimitedField(
+        in bytes: [UInt8],
+        number: Int,
+        payload: [UInt8]
+    ) -> [UInt8]? {
+        guard let fields = parseFields(bytes, in: 0..<bytes.count),
+              let field = fields.first(where: { $0.number == number && $0.wireType == 2 })
+        else { return nil }
+
+        var replacement = [UInt8]()
+        appendMessageField(number: number, payload: payload, to: &replacement)
+
+        var result = Array(bytes[..<field.fieldStart])
+        result.append(contentsOf: replacement)
+        result.append(contentsOf: bytes[field.fieldEnd...])
+        return result
+    }
+
+    private static func newStructureInsertionOffset(
+        structureFields: [WireField],
+        structureStart: Int,
+        structureEnd: Int
+    ) -> Int {
+        guard let firstField = structureFields.first else { return 0 }
+        return min(firstField.fieldStart - structureStart, structureEnd - structureStart)
     }
 
     private static func trackIDFromLyricsPath(_ path: String) -> String? {

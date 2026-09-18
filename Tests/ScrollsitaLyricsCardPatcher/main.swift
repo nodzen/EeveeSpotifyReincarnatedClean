@@ -112,7 +112,8 @@ private func decodedSections(_ response: Data) -> [Data]? {
 
 private let trackID = "5ET9lyWJbupwVpNsSxQe3b"
 private let anotherTrackID = "2iCyV71yTK9z7HIYJjkQHr"
-private let scrollURL = URL(string: "https://spclient.wg.spotify.com/scrollsita/v1/npv")!
+private let scrollURL = URL(string: "https://spclient.wg.spotify.com/scrollsita/v1/scroll/spotify:track:\(trackID)")!
+private let genericScrollURL = URL(string: "https://spclient.wg.spotify.com/scrollsita/v1/scroll")!
 private let nonScrollURL = URL(string: "https://spclient.wg.spotify.com/color-lyrics/v2/track/\(trackID)")!
 
 require(ScrollsitaLyricsCardPatcher.shouldHandle(scrollURL), "Scrollsita responses must be inspected")
@@ -126,15 +127,15 @@ guard let injected = ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissing(or
     fatalError("FAIL: missing lyrics section was not injected")
 }
 
-require(injectedSections.count == 2, "exactly one section must be appended")
-require(injectedSections[0] == ordinarySection, "existing sections must remain byte-for-byte unchanged")
+require(injectedSections.count == 2, "exactly one section must be inserted")
+require(injectedSections[1] == ordinarySection, "existing sections must remain byte-for-byte unchanged")
 require(injected.suffix(responseSuffix.count) == responseSuffix, "top-level fields after structure must survive")
 
-private let addedFields = fields(injectedSections[1])
+private let addedFields = fields(injectedSections[0])
 private let addedInfo = addedFields?.first(where: { $0.number == 39 })?.payload.flatMap(fields)
 private let addedLyrics = addedFields?.first(where: { $0.number == 5 })?.payload.flatMap(fields)
-require(addedInfo?.first(where: { $0.number == 1 })?.payload == Data("eevee-lyrics-\(trackID)".utf8),
-        "injected section needs a deterministic section ID")
+require(addedInfo?.first(where: { $0.number == 1 })?.payload == Data("lyrics".utf8),
+        "cold-start injection needs Spotify's canonical lyrics section ID")
 require(addedLyrics?.first(where: { $0.number == 1 })?.payload == Data("spotify:track:\(trackID)".utf8),
         "injected lyrics entity URI must match the current track")
 require(addedFields?.contains(where: { $0.number == 1 || $0.number == 6 }) == false,
@@ -155,15 +156,15 @@ guard let merchPatched = ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissin
 }
 require(merchPatchedSections.count == 2,
         "a merch section must not suppress external lyrics")
-require(fields(merchPatchedSections[1])?.contains(where: { $0.number == 5 }) == true,
+require(fields(merchPatchedSections[0])?.contains(where: { $0.number == 5 }) == true,
         "lyrics must use Scrollsita oneof field #5")
 
-var scrollRequest = URLRequest(url: scrollURL)
+var scrollRequest = URLRequest(url: genericScrollURL)
 scrollRequest.httpBody = string(1, "spotify:track:\(anotherTrackID)")
 ScrollsitaLyricsCardPatcher.noteScrollsitaRequest(scrollRequest)
 let scrollRequestOnly = response(sections: [section(id: "queue")])
-guard let requestInjected = ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissing(scrollRequestOnly, url: scrollURL),
-      let requestLyricsSection = decodedSections(requestInjected)?.last,
+guard let requestInjected = ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissing(scrollRequestOnly, url: genericScrollURL),
+      let requestLyricsSection = decodedSections(requestInjected)?.first,
       let requestLyricsMessage = fields(requestLyricsSection)?.first(where: { $0.number == 5 })?.payload,
       let requestEntity = fields(requestLyricsMessage)?.first(where: { $0.number == 1 })?.payload else {
     fatalError("FAIL: Scrollsita request body did not supply current track context")
@@ -171,11 +172,18 @@ guard let requestInjected = ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMis
 require(requestEntity == Data("spotify:track:\(anotherTrackID)".utf8),
         "Scrollsita request context must preserve the exact track ID")
 
+let currentLyricsURL = URL(string: "https://spclient.wg.spotify.com/color-lyrics/v2/track/\(anotherTrackID)")!
+let staleLyricsURL = URL(string: "https://spclient.wg.spotify.com/color-lyrics/v2/track/\(trackID)")!
+require(ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(currentLyricsURL),
+        "current-track lyrics response must be delivered")
+require(!ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(staleLyricsURL),
+        "a late previous-track response must be dropped")
+
 let contextURL = URL(string: "https://spclient.wg.spotify.com/color-lyrics/v2/track/\(anotherTrackID)?format=json")!
 ScrollsitaLyricsCardPatcher.noteLyricsRequest(contextURL)
 let contextOnly = response(sections: [section(id: "queue")])
-guard let contextInjected = ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissing(contextOnly, url: scrollURL),
-      let contextLyricsSection = decodedSections(contextInjected)?.last,
+guard let contextInjected = ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissing(contextOnly, url: genericScrollURL),
+      let contextLyricsSection = decodedSections(contextInjected)?.first,
       let contextLyricsMessage = fields(contextLyricsSection)?.first(where: { $0.number == 5 })?.payload,
       let contextEntity = fields(contextLyricsMessage)?.first(where: { $0.number == 1 })?.payload else {
     fatalError("FAIL: recent color-lyrics request did not supply Scrollsita track context")

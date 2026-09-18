@@ -21,6 +21,9 @@ class URLSessionTaskResumeHook: ClassHook<NSObject> {
             ScrollsitaLyricsCardPatcher.noteScrollsitaRequest(request)
             if url.isLyrics {
                 ScrollsitaLyricsCardPatcher.noteLyricsRequest(url)
+                if let trackID = extractTrackId(from: url.path) {
+                    prefetchLyricsIfNeeded(trackId: trackID)
+                }
             }
 
             guard let host = url.host?.lowercased() else {

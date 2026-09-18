@@ -542,6 +542,28 @@ private final class LyricsFetchCoordinator {
 
 private let lyricsFetchCoordinator = LyricsFetchCoordinator()
 
+/// Start the provider lookup when Spotify starts its own color-lyrics task,
+/// rather than waiting several seconds for the eventual 404 response. The
+/// real delegate callback joins the same single-flight entry below, so this
+/// does not duplicate LRCLIB/Genius traffic and gives the NPV card a payload
+/// inside its short loading window.
+func prefetchLyricsIfNeeded(trackId: String) {
+    guard UserDefaults.lyricsSource.isReplacingLyrics, !trackId.isEmpty else { return }
+
+    let encodedTrackID = trackId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+        ?? trackId
+    guard let requestURL = URL(string: "https://spclient.wg.spotify.com/color-lyrics/v2/track/\(encodedTrackID)") else {
+        return
+    }
+    DispatchQueue.global(qos: .userInitiated).async {
+        guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(requestURL) else {
+            writeDebugLog("[Lyrics] skipped stale prefetch track=\(trackId)")
+            return
+        }
+        _ = try? getLyricsDataForCurrentTrack(requestURL.path)
+    }
+}
+
 private func lyricsFetchKey(
     trackId: String,
     source: LyricsSource,
