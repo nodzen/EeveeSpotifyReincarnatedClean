@@ -713,13 +713,31 @@ private func lyricsFetchKey(
 /// Returns a serialized empty `Lyrics` protobuf payload.
 /// Used as a fallback when every lyrics source (including Genius fallback) fails,
 /// so we show "no lyrics" instead of leaking Spotify's own Musixmatch response.
-func emptyLyricsData(originalLyrics: Lyrics? = nil) -> Data? {
+func emptyLyricsData(
+    originalLyrics: Lyrics? = nil,
+    trackIdentifier: String? = nil
+) -> Data? {
     let emptyDto = LyricsDto(lines: [], timeSynced: false, romanization: .original, translation: nil)
     var lyrics = Lyrics.with {
         $0.data = emptyDto.toSpotifyLyricsData(source: "")
     }
     if let originalLyrics = originalLyrics {
         lyrics.colors = originalLyrics.colors
+    } else if let trackIdentifier {
+        let settings = UserDefaults.lyricsColors
+        let color: Color
+        if settings.useStaticColor {
+            color = Color(hex: settings.staticColor)
+        } else if let uiColor = readLyricsBackgroundColor(trackId: trackIdentifier) {
+            color = Color(uiColor).normalized(settings.normalizationFactor)
+        } else {
+            color = Color.gray
+        }
+        lyrics.colors = LyricsColors.with {
+            $0.backgroundColor = color.uInt32
+            $0.lineColor = Color.black.uInt32
+            $0.activeLineColor = Color.white.uInt32
+        }
     }
     return try? lyrics.serializedData()
 }

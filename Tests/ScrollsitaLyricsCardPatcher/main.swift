@@ -93,7 +93,7 @@ private func response(sections: [Data], trailing: Data = Data()) -> Data {
 }
 
 private func section(id: String, lyricsTrackID: String? = nil, marker: String? = nil) -> Data {
-    var value = lengthDelimited(39, string(1, id))
+    var value = lengthDelimited(23, string(1, id))
     if let lyricsTrackID {
         value.append(lengthDelimited(5, string(1, "spotify:track:\(lyricsTrackID)")))
     }
@@ -116,6 +116,12 @@ private let scrollURL = URL(string: "https://spclient.wg.spotify.com/scrollsita/
 private let genericScrollURL = URL(string: "https://spclient.wg.spotify.com/scrollsita/v1/scroll")!
 private let nonScrollURL = URL(string: "https://spclient.wg.spotify.com/color-lyrics/v2/track/\(trackID)")!
 
+// The patcher intentionally persists a native section template between app
+// launches. Keep this regression test deterministic and exercise the actual
+// 9.1.80 cold-start schema before caching a native sample below.
+UserDefaults.standard.removeObject(forKey: "eevee.scrollsita.nativeLyricsSection.9180")
+UserDefaults.standard.removeObject(forKey: "eevee.scrollsita.nativeLyricsSectionIndex.9180")
+
 require(ScrollsitaLyricsCardPatcher.shouldHandle(scrollURL), "Scrollsita responses must be inspected")
 require(!ScrollsitaLyricsCardPatcher.shouldHandle(nonScrollURL), "unrelated responses must stay untouched")
 
@@ -132,10 +138,10 @@ require(injectedSections[1] == ordinarySection, "existing sections must remain b
 require(injected.suffix(responseSuffix.count) == responseSuffix, "top-level fields after structure must survive")
 
 private let addedFields = fields(injectedSections[0])
-private let addedInfo = addedFields?.first(where: { $0.number == 39 })?.payload.flatMap(fields)
+private let addedInfo = addedFields?.first(where: { $0.number == 23 })?.payload.flatMap(fields)
 private let addedLyrics = addedFields?.first(where: { $0.number == 5 })?.payload.flatMap(fields)
-require(addedInfo?.first(where: { $0.number == 1 })?.payload == Data("lyrics".utf8),
-        "cold-start injection needs Spotify's canonical lyrics section ID")
+require(addedInfo?.first(where: { $0.number == 1 })?.payload == Data("spotify:section:\(trackID)".utf8),
+        "injected cards need a per-track section ID so Spotify cannot reuse stale content")
 require(addedLyrics?.first(where: { $0.number == 1 })?.payload == Data("spotify:track:\(trackID)".utf8),
         "injected lyrics entity URI must match the current track")
 require(addedFields?.contains(where: { $0.number == 1 || $0.number == 6 }) == false,

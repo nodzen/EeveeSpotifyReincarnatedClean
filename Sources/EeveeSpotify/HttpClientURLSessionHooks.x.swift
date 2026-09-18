@@ -69,18 +69,20 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 DispatchQueue.global(qos: .userInitiated).async { [self] in
                     guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
                         DispatchQueue.main.async { [self] in
-                            writeDebugLog("[HCUS] Cancelled stale empty-body lyrics task track=\(extractTrackId(from: url.path) ?? "unknown")")
-                            orig.URLSession(session, task: task, didCompleteWithError: URLError(.cancelled))
+                            writeDebugLog("[HCUS] Finished stale empty-body lyrics task without cancellation track=\(extractTrackId(from: url.path) ?? "unknown")")
+                            orig.URLSession(session, dataTask: task, didReceiveData: emptyLyricsData() ?? Data())
+                            orig.URLSession(session, task: task, didCompleteWithError: nil)
                         }
                         return
                     }
                     let lyricsPayload = (try? getLyricsDataForCurrentTrack(url.path))
-                        ?? emptyLyricsData()
+                        ?? emptyLyricsData(trackIdentifier: extractTrackId(from: url.path))
                         ?? Data()
                     DispatchQueue.main.async { [self] in
                         guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
-                            writeDebugLog("[HCUS] Dropped stale empty-body lyrics response track=\(extractTrackId(from: url.path) ?? "unknown")")
-                            orig.URLSession(session, task: task, didCompleteWithError: URLError(.cancelled))
+                            writeDebugLog("[HCUS] Finished stale empty-body lyrics response without cancellation track=\(extractTrackId(from: url.path) ?? "unknown")")
+                            orig.URLSession(session, dataTask: task, didReceiveData: emptyLyricsData() ?? Data())
+                            orig.URLSession(session, task: task, didCompleteWithError: nil)
                             return
                         }
                         orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
@@ -106,8 +108,9 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 DispatchQueue.global(qos: .userInitiated).async { [self] in
                     guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
                         DispatchQueue.main.async { [self] in
-                            writeDebugLog("[HCUS] Cancelled stale buffered lyrics task track=\(extractTrackId(from: url.path) ?? "unknown")")
-                            orig.URLSession(session, task: task, didCompleteWithError: URLError(.cancelled))
+                            writeDebugLog("[HCUS] Finished stale buffered lyrics task without cancellation track=\(extractTrackId(from: url.path) ?? "unknown")")
+                            orig.URLSession(session, dataTask: task, didReceiveData: emptyLyricsData() ?? Data())
+                            orig.URLSession(session, task: task, didCompleteWithError: nil)
                         }
                         return
                     }
@@ -115,12 +118,16 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                         url.path,
                         originalLyrics: originalLyrics
                     ))
-                        ?? emptyLyricsData(originalLyrics: originalLyrics)
+                        ?? emptyLyricsData(
+                            originalLyrics: originalLyrics,
+                            trackIdentifier: extractTrackId(from: url.path)
+                        )
                         ?? Data()
                     DispatchQueue.main.async { [self] in
                         guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
-                            writeDebugLog("[HCUS] Dropped stale buffered lyrics response track=\(extractTrackId(from: url.path) ?? "unknown")")
-                            orig.URLSession(session, task: task, didCompleteWithError: URLError(.cancelled))
+                            writeDebugLog("[HCUS] Finished stale buffered lyrics response without cancellation track=\(extractTrackId(from: url.path) ?? "unknown")")
+                            orig.URLSession(session, dataTask: task, didReceiveData: emptyLyricsData() ?? Data())
+                            orig.URLSession(session, task: task, didCompleteWithError: nil)
                             return
                         }
                         orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
@@ -170,6 +177,43 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
             return
         }
 
+        // Spotify 9.1.80 permanently backs off color-lyrics requests after a
+        // response disposition is cancelled. Superseded tracks therefore get
+        // a valid empty 200 response instead of `.cancel`, while the current
+        // track gets the provider payload through the same lifecycle.
+        let deliverSyntheticLyrics = { [self] (lyricsData: Data, reason: String) in
+            guard let synthetic = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: "2.0",
+                headerFields: ["Content-Type": "application/x-protobuf"]
+            ) else {
+                orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: handler)
+                return
+            }
+
+            SpotifyResponsePatcher.markSyntheticLyricsTask(task)
+            orig.URLSession(
+                session,
+                dataTask: task,
+                didReceiveResponse: synthetic,
+                completionHandler: { disposition in
+                    let finish = { [self] in
+                        handler(disposition)
+                        if disposition == .allow {
+                            self.orig.URLSession(session, dataTask: task, didReceiveData: lyricsData)
+                        }
+                    }
+                    if Thread.isMainThread {
+                        finish()
+                    } else {
+                        DispatchQueue.main.async(execute: finish)
+                    }
+                }
+            )
+            writeDebugLog("[HCUS] Delivered synthetic lyrics response reason=\(reason) task=\(task.taskIdentifier)")
+        }
+
         // Spotify 9.1.80 can return native lyrics with HTTP 200 even when
         // replacement is enabled. If the response is opened immediately, the
         // lower card is built from the native body and does not observe our
@@ -178,39 +222,30 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
         if response.statusCode == 200 {
             writeDebugLog("[HCUS] Holding native 200 lyrics response (taskId=\(task.taskIdentifier))")
 
-            DispatchQueue.global(qos: .userInitiated).async { [self] in
+            DispatchQueue.global(qos: .userInitiated).async {
                 guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
                     DispatchQueue.main.async {
-                        writeDebugLog("[HCUS] Cancelled stale native 200 lyrics task track=\(extractTrackId(from: url.path) ?? "unknown")")
-                        handler(.cancel)
+                        deliverSyntheticLyrics(
+                            emptyLyricsData() ?? Data(),
+                            "stale-native-200"
+                        )
                     }
                     return
                 }
 
                 let lyricsData = (try? getLyricsDataForCurrentTrack(url.path))
-                    ?? emptyLyricsData()
+                    ?? emptyLyricsData(trackIdentifier: extractTrackId(from: url.path))
                     ?? Data()
 
-                DispatchQueue.main.async { [self] in
+                DispatchQueue.main.async {
                     guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
-                        writeDebugLog("[HCUS] Dropped stale native 200 lyrics response track=\(extractTrackId(from: url.path) ?? "unknown")")
-                        handler(.cancel)
+                        deliverSyntheticLyrics(
+                            emptyLyricsData() ?? Data(),
+                            "stale-native-200-after-fetch"
+                        )
                         return
                     }
-                    guard let synthetic = HTTPURLResponse(
-                        url: url,
-                        statusCode: 200,
-                        httpVersion: "2.0",
-                        headerFields: [:]
-                    ) else {
-                        handler(.cancel)
-                        return
-                    }
-
-                    SpotifyResponsePatcher.markSyntheticLyricsTask(task)
-                    orig.URLSession(session, dataTask: task, didReceiveResponse: synthetic, completionHandler: handler)
-                    orig.URLSession(session, dataTask: task, didReceiveData: lyricsData)
-                    writeDebugLog("[HCUS] Delivered external lyrics body for native 200 task=\(task.taskIdentifier)")
+                    deliverSyntheticLyrics(lyricsData, "native-200-replacement")
                 }
             }
             return
@@ -221,25 +256,31 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
         // Fetch on a background queue while holding the completion handler open.
         // Calling getLyricsDataForCurrentTrack synchronously here would block the
         // delegate queue and prevent subsequent delegate callbacks from firing.
-        DispatchQueue.global(qos: .userInitiated).async { [self] in
+        DispatchQueue.global(qos: .userInitiated).async {
             guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
                 DispatchQueue.main.async {
-                    writeDebugLog("[HCUS] Cancelled stale HTTP lyrics task track=\(extractTrackId(from: url.path) ?? "unknown")")
-                    handler(.cancel)
+                    deliverSyntheticLyrics(
+                        emptyLyricsData() ?? Data(),
+                        "stale-http-\(response.statusCode)"
+                    )
                 }
                 return
             }
             let data = try? getLyricsDataForCurrentTrack(url.path)
 
-            guard let lyricsData = data,
-                  let ok = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "2.0", headerFields: [:]) else {
-                DispatchQueue.main.async { [self] in
+            guard let lyricsData = data else {
+                DispatchQueue.main.async {
                     guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
-                        writeDebugLog("[HCUS] Cancelled stale failed lyrics task track=\(extractTrackId(from: url.path) ?? "unknown")")
-                        handler(.cancel)
+                        deliverSyntheticLyrics(
+                            emptyLyricsData() ?? Data(),
+                            "stale-failed-provider"
+                        )
                         return
                     }
-                    orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: handler)
+                    deliverSyntheticLyrics(
+                        emptyLyricsData(trackIdentifier: extractTrackId(from: url.path)) ?? Data(),
+                        "provider-failed"
+                    )
                 }
                 return
             }
@@ -248,17 +289,15 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
             // lyrics UI keeps main-actor state. Deliver the replacement on the
             // main queue just like SPTDataLoaderServiceHook does; otherwise one
             // lyrics surface may parse the body while the NPV card never updates.
-            DispatchQueue.main.async { [self] in
+            DispatchQueue.main.async {
                 guard ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url) else {
-                    writeDebugLog("[HCUS] Dropped stale lyrics response track=\(extractTrackId(from: url.path) ?? "unknown")")
-                    handler(.cancel)
+                    deliverSyntheticLyrics(
+                        emptyLyricsData() ?? Data(),
+                        "stale-provider-result"
+                    )
                     return
                 }
-                SpotifyResponsePatcher.markSyntheticLyricsTask(task)
-                orig.URLSession(session, dataTask: task, didReceiveResponse: ok, completionHandler: handler)
-                orig.URLSession(session, dataTask: task, didReceiveData: lyricsData)
-                // The real URLSession callback supplies the only completion. Its
-                // original error body is discarded by consumeSyntheticLyricsTask.
+                deliverSyntheticLyrics(lyricsData, "http-\(response.statusCode)-replacement")
             }
         }
     }
