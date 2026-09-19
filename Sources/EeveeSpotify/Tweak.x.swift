@@ -306,6 +306,10 @@ struct EeveeSpotify: Tweak {
         // the compatible classes/selectors.
         activateModernPromotionBlockers()
 
+        // Block ClientMessagingPlatform marketing surfaces (9.1.84 win-back
+        // fullscreen takeover and Home Premium banner) and their element views.
+        activateClientMessagingPlatformBlocker()
+
         // Block upsell components injected into Hub/home JSON (e.g. upgrade banners).
         if let hub = NSClassFromString("HUBViewModelBuilderImplementation"),
            class_getInstanceMethod(hub, NSSelectorFromString("addJSONDictionary:")) != nil {
