@@ -34,7 +34,44 @@ private let logAdBlockerEvents         = EeveeDebug.enabled
 
 @inline(__always)
 private func adlog(_ what: String) {
-    if logAdBlockerEvents { NSLog("[EeveeSpotify][AdBlock] suppressed %@", what) }
+    if logAdBlockerEvents {
+        writeDebugLog("[AdBlock] suppressed \(what)")
+    }
+}
+
+// Activation diagnostics also go to the debug file — NSLog alone never
+// reached the tester log and hid whether hooks actually attached.
+private func ablog(_ message: String) {
+    writeDebugLog("[AdBlock] \(message)")
+}
+
+// Swift classes register in the ObjC runtime lazily, so NSClassFromString at
+// tweak-init time can miss classes that exist (build-3 tester log: every
+// scroll-feed service kill skipped as "unavailable" while the ad rendered).
+// Brute-force the registered class list as a fallback, cached after the first
+// scan so every activation lookup shares one pass.
+private var classListByNameCache: [String: AnyClass] = [:]
+private var classListByNameCacheBuilt = false
+
+func findTweakClass(_ name: String) -> AnyClass? {
+    if let cls = NSClassFromString(name) { return cls }
+    if classListByNameCacheBuilt { return classListByNameCache[name] }
+    // objc_copyClassList returns AutoreleasingUnsafeMutablePointer; subscripting
+    // triggers retain/autorelease msgSend which aborts on iOS 26+ (same trap as
+    // EeveeProbes). objc_getClassList with a raw buffer sidesteps it.
+    let total = objc_getClassList(nil, 0)
+    guard total > 0 else { return nil }
+    let buf = UnsafeMutablePointer<AnyClass>.allocate(capacity: Int(total))
+    defer { buf.deallocate() }
+    let n = objc_getClassList(AutoreleasingUnsafeMutablePointer<AnyClass>(buf), total)
+    for i in 0..<Int(n) {
+        let raw = UnsafeRawPointer(buf).load(fromByteOffset: i * MemoryLayout<UnsafeRawPointer>.size,
+                                              as: UnsafeRawPointer.self)
+        let cls = unsafeBitCast(raw, to: AnyClass.self)
+        classListByNameCache[String(cString: class_getName(cls))] = cls
+    }
+    classListByNameCacheBuilt = true
+    return classListByNameCache[name]
 }
 
 class AdsServiceImplKill: ClassHook<NSObject> {
