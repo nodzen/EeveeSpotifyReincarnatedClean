@@ -22,6 +22,37 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             return
         }
 
+        if let nativeResponse = LyricsResponseGate.take(for: task) {
+            let buffer = URLSessionHelper.shared.obtainData(for: task)
+            let originalLyrics = nativeResponse.statusCode == 200
+                ? buffer.flatMap { try? Lyrics(serializedBytes: $0) } : nil
+            DispatchQueue.global(qos: .userInitiated).async { [self] in
+                // A response always belongs to its URL, even after a skip.
+                // Substituting the visible song here poisons Spotify's cache.
+                let payload = (try? getLyricsDataForCurrentTrack(url.path, originalLyrics: originalLyrics))
+                    ?? emptyLyricsData(originalLyrics: originalLyrics, trackIdentifier: extractTrackId(from: url.path))
+                    ?? Data()
+                DispatchQueue.main.async { [self] in
+                    guard let synthetic = HTTPURLResponse(url: url, statusCode: 200,
+                        httpVersion: "2.0", headerFields: ["Content-Type": "application/x-protobuf"]) else {
+                        orig.URLSession(session, task: task, didCompleteWithError: error)
+                        return
+                    }
+                    orig.URLSession(session, dataTask: task, didReceiveResponse: synthetic,
+                        completionHandler: { disposition in
+                            DispatchQueue.main.async { [self] in
+                                if disposition == .allow {
+                                    orig.URLSession(session, dataTask: task, didReceiveData: payload)
+                                }
+                                orig.URLSession(session, task: task, didCompleteWithError: nil)
+                                writeDebugLog("[LyricsDelivery] completed track=\(extractTrackId(from: url.path) ?? "?") task=\(task.taskIdentifier) bytes=\(payload.count) nativeColors=\(originalLyrics?.hasColors == true)")
+                            }
+                        })
+                }
+            }
+            return
+        }
+
         logSessionResponse(task, url: url, error: error)
 
         if CasitaResponseProbe.shouldProbe(url) {
@@ -72,9 +103,7 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                     let requestedPayload = (try? getLyricsDataForCurrentTrack(url.path))
                         ?? emptyLyricsData(trackIdentifier: extractTrackId(from: url.path))
                         ?? Data()
-                    let lyricsPayload = ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url)
-                        ? requestedPayload
-                        : lyricsDataForLatestTrack(replacing: url)
+                    let lyricsPayload = requestedPayload
                     DispatchQueue.main.async { [self] in
                         orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
                         orig.URLSession(session, task: task, didCompleteWithError: nil)
@@ -88,6 +117,24 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 orig.URLSession(session, dataTask: task, didReceiveData: Data())
                 // Always forward completion; otherwise Spotify may hang and get watchdog-killed.
                 orig.URLSession(session, task: task, didCompleteWithError: error)
+            }
+            return
+        }
+
+        // Publish the screen structure without waiting for external providers.
+        // Playback prefetch warms lyrics independently; only the lyrics response
+        // waits for its payload, never the rest of the Now Playing screen.
+        if BaseLyricsGroup.isActive, ScrollsitaLyricsCardPatcher.shouldHandle(url),
+           let trackID = ScrollsitaLyricsCardPatcher.responseTrackID(buffer, url: url) {
+            prefetchLyricsIfNeeded(trackId: trackID)
+            DispatchQueue.global(qos: .userInitiated).async { [self] in
+                let patched = (try? SpotifyResponsePatcher.patch(url: url, buffer: buffer))?.data ?? buffer
+                DispatchQueue.main.async { [self] in
+                    orig.URLSession(session, dataTask: task, didReceiveData: patched)
+                    orig.URLSession(session, task: task, didCompleteWithError: nil)
+                    ScrollsitaLyricsCardPatcher.noteScrollsitaPublished(trackID)
+                    writeDebugLog("[LyricsDelivery] Scrollsita published track=\(trackID)")
+                }
             }
             return
         }
@@ -120,9 +167,7 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
                             trackIdentifier: extractTrackId(from: url.path)
                         )
                         ?? Data()
-                    let lyricsPayload = ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url)
-                        ? requestedPayload
-                        : lyricsDataForLatestTrack(replacing: url)
+                    let lyricsPayload = requestedPayload
                     DispatchQueue.main.async { [self] in
                         orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
                         orig.URLSession(session, task: task, didCompleteWithError: nil)
@@ -183,89 +228,11 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             return
         }
 
-        // Feed every replacement through one normal successful response. In
-        // particular, never answer a superseded track with `.cancel`: Spotify
-        // 9.1.80 treats that as a transport failure and stops creating further
-        // color-lyrics tasks until the process is restarted.
-        //
-        // The body is forwarded from the wrapped response disposition callback
-        // so Spotify has accepted the synthetic response before it sees data.
-        let deliverSyntheticLyrics = { [self] (lyricsData: Data, reason: String) in
-            guard let synthetic = HTTPURLResponse(
-                url: url,
-                statusCode: 200,
-                httpVersion: "2.0",
-                headerFields: ["Content-Type": "application/x-protobuf"]
-            ) else {
-                orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: handler)
-                return
-            }
-
-            SpotifyResponsePatcher.markSyntheticLyricsTask(task)
-            orig.URLSession(
-                session,
-                dataTask: task,
-                didReceiveResponse: synthetic,
-                completionHandler: { disposition in
-                    let finish = { [self] in
-                        handler(disposition)
-                        if disposition == .allow {
-                            self.orig.URLSession(session, dataTask: task, didReceiveData: lyricsData)
-                        }
-                    }
-                    if Thread.isMainThread {
-                        finish()
-                    } else {
-                        DispatchQueue.main.async(execute: finish)
-                    }
-                }
-            )
-            writeDebugLog("[DL] Delivered synthetic lyrics response reason=\(reason) task=\(task.taskIdentifier)")
-        }
-
-        // Spotify 9.1.80 can return native lyrics with HTTP 200 even when
-        // replacement is enabled. Delivering our body after the native
-        // response has already been opened leaves the lower card stale until
-        // it is reopened, so hold the response until the custom payload is
-        // ready.
-        if response.statusCode == 200 {
-            writeDebugLog("[DL] Holding native 200 lyrics response (taskId=\(task.taskIdentifier))")
-
-            DispatchQueue.global(qos: .userInitiated).async {
-                let requestedPayload = (try? getLyricsDataForCurrentTrack(url.path))
-                    ?? emptyLyricsData(trackIdentifier: extractTrackId(from: url.path))
-                    ?? Data()
-                let isCurrent = ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url)
-                let lyricsData = isCurrent
-                    ? requestedPayload
-                    : lyricsDataForLatestTrack(replacing: url)
-                let reason = isCurrent ? "native-200-replacement" : "rerouted-stale-native-200"
-
-                DispatchQueue.main.async {
-                    deliverSyntheticLyrics(lyricsData, reason)
-                }
-            }
-            return
-        }
-
-        writeDebugLog("[DL] Replacing lyrics HTTP \(response.statusCode) (taskId=\(task.taskIdentifier))")
-
-        DispatchQueue.global(qos: .userInitiated).async {
-            let requestedPayload = (try? getLyricsDataForCurrentTrack(url.path))
-                ?? emptyLyricsData(trackIdentifier: extractTrackId(from: url.path))
-                ?? Data()
-            let isCurrent = ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(url)
-            let lyricsData = isCurrent
-                ? requestedPayload
-                : lyricsDataForLatestTrack(replacing: url)
-            let reason = isCurrent
-                ? "http-\(response.statusCode)-replacement"
-                : "rerouted-stale-http-\(response.statusCode)"
-
-            DispatchQueue.main.async {
-                deliverSyntheticLyrics(lyricsData, reason)
-            }
-        }
+        // Let URLSession drain the original body, but do not open Spotify's
+        // renderer until its replacement is ready. The completion path keeps
+        // the native palette and delivers response -> body -> completion.
+        LyricsResponseGate.hold(response, for: task)
+        handler(.allow)
     }
 
     func URLSession(

@@ -57,7 +57,7 @@ private let karaokeObserver = EeveeKaraokeObserver()
 // hook now just fails to attach (logged, harmless), the same outcome as
 // before this was diagnosed.
 class KaraokePlayerServiceObserverHook: ClassHook<NSObject> {
-    typealias Group = KaraokeGroup
+    typealias Group = KaraokeLegacyGroup
 
     // "SPTPlayerServiceImplementation" alone stopped resolving as of the
     // 9.1.78 IPA I was given to inspect — `NSClassFromString` on that bare
@@ -97,6 +97,7 @@ class KaraokePlayerServiceObserverHook: ClassHook<NSObject> {
 }
 
 struct KaraokeGroup: HookGroup {}
+struct KaraokeLegacyGroup: HookGroup {}
 
 private var didDumpStateObservable = false
 
@@ -147,8 +148,27 @@ func activateKaraokeHooks() {
     let resolvedClass: AnyClass? = NSClassFromString(legacyName) ?? NSClassFromString(mangledName)
     let resolvedName = resolvedClass.map { NSStringFromClass($0) }
     writeDebugLog("[Karaoke] activate: class=\(resolvedName ?? "<missing>")")
-    KaraokeGroup().activate()
-    writeDebugLog("[Karaoke] hook group activated")
+
+    // Spotify 9.1.78+ exposes the live player through provideStateObservable().
+    // The old addPlayerObserver: hook is retained for older builds, but
+    // activating both groups on the current service makes Orion try to hook a
+    // selector that no longer exists and produces a noisy hook failure.
+    if let resolvedClass {
+        let hasStateObservable = class_getInstanceMethod(
+            resolvedClass,
+            NSSelectorFromString("provideStateObservable")
+        ) != nil
+
+        if hasStateObservable {
+            KaraokeGroup().activate()
+            writeDebugLog("[Karaoke] state-observable hook group activated")
+        } else {
+            KaraokeLegacyGroup().activate()
+            writeDebugLog("[Karaoke] legacy observer hook group activated")
+        }
+    } else {
+        writeDebugLog("[Karaoke] no player service class; hooks skipped")
+    }
 
     // -addPlayerObserver: exists on this class (Orion found it enough to
     // report a hook failure rather than a missing-target error — see

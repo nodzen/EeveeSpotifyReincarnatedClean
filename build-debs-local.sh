@@ -145,6 +145,13 @@ run_tests() {
     test_swift_file Sources/EeveeSpotify/Premium/Helpers/ServerSidedFeaturePolicy.swift Tests/ServerSidedFeaturePolicy/main.swift
     test_swift_file Sources/EeveeSpotify/Premium/Helpers/BundledConfigurationPolicy.swift Tests/BundledConfigurationPolicy/main.swift
     test_swift_file Sources/EeveeSpotify/Shared/Helpers/SyntheticLyricsTaskTracker.swift Tests/SyntheticLyricsTaskTracker/main.swift
+    test_swift_file Sources/EeveeSpotify/Shared/Helpers/LyricsResponseGate.swift Tests/LyricsResponseGate/main.swift
+    swiftc Sources/EeveeSpotify/Lyrics/Models/LyricsDto.swift \
+        Sources/EeveeSpotify/Lyrics/Models/LyricsLineDto.swift \
+        Sources/EeveeSpotify/Lyrics/Models/LyricsTranslationDto.swift \
+        Sources/EeveeSpotify/Lyrics/Models/LyricsRomanizationStatus.swift \
+        Tests/LyricsDto/main.swift -o "$TMP_DIR/lyrics-dto-test"
+    "$TMP_DIR/lyrics-dto-test"
     python3 Tests/ResolveConfigurationSnapshot/test.py
 }
 

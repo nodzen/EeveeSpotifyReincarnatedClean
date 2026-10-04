@@ -139,6 +139,7 @@ unknown_error = "Unknown Error";
 
 song_is_instrumental = "This song is instrumental.";
 let_the_music_play = "Let the music play...";
+lyrics_not_found = "We couldn't find lyrics for this song.";
 
 // liked songs title, should match official spotify loc
 

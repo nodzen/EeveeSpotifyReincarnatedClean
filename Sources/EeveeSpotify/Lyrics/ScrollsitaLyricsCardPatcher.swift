@@ -32,6 +32,168 @@ enum ScrollsitaLyricsCardPatcher {
     private static let contextLock = NSLock()
     private static var latestLyricsRequest: (id: String, timestamp: Date)?
     private static var latestScrollsitaRequest: (id: String, timestamp: Date)?
+    private static var latestPlaybackTrack: (id: String, timestamp: Date)?
+    private static var latestScrollsitaPublication: (id: String, timestamp: Date)?
+    private static var latestExternalLyricsReady: (id: String, timestamp: Date)?
+    private static var lastLyricsUIRefresh: (id: String, timestamp: Date)?
+    /// Returns true only after the UIKit side has actually found and reloaded
+    /// the visible NPV collection view. A false result is retried because a
+    /// provider can finish while the Now Playing controller is between its
+    /// disappear/appear callbacks.
+    private static var lyricsUIRefreshHandler: ((String) -> Bool)?
+
+    /// Playback events exist even when Spotify does not request lyrics or
+    /// Scrollsita. Network activity must not overwrite this observed identity.
+    @discardableResult
+    static func notePlaybackTrack(_ trackID: String) -> Bool {
+        guard !trackID.isEmpty else { return false }
+        contextLock.lock()
+        defer { contextLock.unlock() }
+        let changed = latestPlaybackTrack?.id != trackID
+        latestPlaybackTrack = (trackID, Date())
+        return changed
+    }
+
+    /// Returns true only when the playback observer has identified this exact
+    /// track recently. Unlike the generic currentTrackID() fallback, this is
+    /// safe to use when reading artwork: a late MediaPlayer snapshot must not
+    /// make a previous song's cover determine the new lyrics palette.
+    static func isCurrentPlaybackTrack(_ trackID: String) -> Bool {
+        guard !trackID.isEmpty else { return false }
+        contextLock.lock()
+        defer { contextLock.unlock() }
+        guard let playback = latestPlaybackTrack else { return false }
+        return playback.id == trackID
+            && Date().timeIntervalSince(playback.timestamp) <= currentTrackLifetime
+    }
+
+    /// Installed by the iOS NPV hook. Keeping the UIKit-specific part outside
+    /// this parser lets the standalone protobuf regression tests compile on
+    /// macOS as well.
+    static func installLyricsUIRefreshHandler(_ handler: @escaping (String) -> Bool) {
+        contextLock.lock()
+        lyricsUIRefreshHandler = handler
+        let now = Date()
+        let pendingTrack: String? = {
+            guard let published = latestScrollsitaPublication,
+                  let ready = latestExternalLyricsReady,
+                  published.id == ready.id,
+                  now.timeIntervalSince(published.timestamp) <= currentTrackLifetime,
+                  now.timeIntervalSince(ready.timestamp) <= currentTrackLifetime else {
+                return nil
+            }
+            return published.id
+        }()
+        contextLock.unlock()
+
+        // The first NPV instance can be installed after the network callbacks
+        // have already completed. Do not lose that pending refresh merely
+        // because the handler was not present at the time of the race.
+        if let pendingTrack {
+            scheduleLyricsUIRefresh(for: pendingTrack)
+        }
+    }
+
+    /// Called from viewWillAppear after Spotify has attached the NPV view to a
+    /// window. This covers the case where the provider completed while the
+    /// screen was hidden and the first refresh attempt was deferred.
+    static func retryLyricsUIRefreshIfNeeded() {
+        contextLock.lock()
+        let now = Date()
+        let pendingTrack: String? = {
+            guard let published = latestScrollsitaPublication,
+                  let ready = latestExternalLyricsReady,
+                  published.id == ready.id,
+                  now.timeIntervalSince(published.timestamp) <= currentTrackLifetime,
+                  now.timeIntervalSince(ready.timestamp) <= currentTrackLifetime else {
+                return nil
+            }
+            return published.id
+        }()
+        contextLock.unlock()
+
+        if let pendingTrack {
+            scheduleLyricsUIRefresh(for: pendingTrack)
+        }
+    }
+
+    /// The Scrollsita structure is often rendered before the external
+    /// provider returns. Spotify 9.1.80 does not observe our later
+    /// /color-lyrics payload, so remember both sides of that race and refresh
+    /// the already-visible controller once the pair is complete.
+    static func noteScrollsitaPublished(_ trackID: String) {
+        guard !trackID.isEmpty else { return }
+
+        contextLock.lock()
+        let now = Date()
+        latestScrollsitaPublication = (trackID, now)
+        let shouldRefresh = latestExternalLyricsReady?.id == trackID
+            && now.timeIntervalSince(latestExternalLyricsReady!.timestamp) <= currentTrackLifetime
+        contextLock.unlock()
+
+        if shouldRefresh {
+            scheduleLyricsUIRefresh(for: trackID)
+        }
+    }
+
+    /// Called after a non-empty external payload has been assembled. The
+    /// refresh is deliberately deferred to the main queue and deduplicated;
+    /// the same single-flight result can be consumed by several Spotify tasks.
+    static func noteExternalLyricsReady(_ trackID: String) {
+        guard !trackID.isEmpty else { return }
+
+        contextLock.lock()
+        let now = Date()
+        latestExternalLyricsReady = (trackID, now)
+        let shouldRefresh = latestScrollsitaPublication?.id == trackID
+            && now.timeIntervalSince(latestScrollsitaPublication!.timestamp) <= currentTrackLifetime
+        contextLock.unlock()
+
+        if shouldRefresh {
+            scheduleLyricsUIRefresh(for: trackID)
+        }
+    }
+
+    private static func scheduleLyricsUIRefresh(for trackID: String, attempt: Int = 0) {
+        contextLock.lock()
+        let handler = lyricsUIRefreshHandler
+        contextLock.unlock()
+
+        guard handler != nil else {
+            writeDebugLog("[LyricsUI] refresh handler is not installed track=\(trackID)")
+            return
+        }
+
+        let delay = attempt == 0 ? 0.1 : 0.25
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard currentTrackID() == trackID else {
+                writeDebugLog("[LyricsUI] skipped refresh for stale track=\(trackID)")
+                return
+            }
+
+            contextLock.lock()
+            let now = Date()
+            let alreadyRefreshed = lastLyricsUIRefresh?.id == trackID
+                && now.timeIntervalSince(lastLyricsUIRefresh!.timestamp) < 1.0
+            contextLock.unlock()
+
+            guard !alreadyRefreshed else { return }
+
+            guard let handler else { return }
+            if handler(trackID) {
+                contextLock.lock()
+                lastLyricsUIRefresh = (trackID, Date())
+                contextLock.unlock()
+            }
+            else if attempt < 8 {
+                writeDebugLog("[LyricsUI] refresh retry=\(attempt + 1) track=\(trackID)")
+                scheduleLyricsUIRefresh(for: trackID, attempt: attempt + 1)
+            }
+            else {
+                writeDebugLog("[LyricsUI] refresh failed after retries track=\(trackID)")
+            }
+        }
+    }
     private static var nativeLyricsSectionTemplate: Data?
     private static var nativeLyricsSectionIndex: Int?
     private static let nativeTemplateDefaultsKey = "eevee.scrollsita.nativeLyricsSection.9180"
@@ -66,6 +228,7 @@ enum ScrollsitaLyricsCardPatcher {
         contextLock.lock()
         latestLyricsRequest = (trackID, Date())
         contextLock.unlock()
+        writeDebugLog("[LyricsNetwork] Spotify requested lyrics track=\(trackID)")
     }
 
     /// Spotify 9.1.80's `ScrollsitaRequest` carries `entityUri`. Capture it
@@ -84,6 +247,7 @@ enum ScrollsitaLyricsCardPatcher {
         contextLock.lock()
         latestScrollsitaRequest = (trackID, Date())
         contextLock.unlock()
+        writeDebugLog("[LyricsNetwork] Spotify requested Scrollsita track=\(trackID)")
         return trackID
     }
 
@@ -101,16 +265,21 @@ enum ScrollsitaLyricsCardPatcher {
         return responseTrackID == currentTrackID
     }
 
-    /// The newest track identity observed from either lyrics or Scrollsita.
-    /// Exposed so a response that became stale while its provider was loading
-    /// can be rerouted to the visible track instead of painting an empty gray
-    /// payload over the shared lyrics renderer.
+    /// Best available visible-track context, used for prefetch and legacy UI
+    /// state only. Response payloads must always retain their own request ID.
     static func currentTrackID() -> String? {
         recentCurrentTrackID()
     }
 
-    /// Returns a modified response only when the server omitted the lyrics
-    /// section and an exact/recent track ID is available.
+    /// Returns a modified response when the server omitted the lyrics section
+    /// or when Spotify reused the previous track's lyrics section identity.
+    ///
+    /// Spotify 9.1.80 keeps the lower-card section in the response after a
+    /// track change, but its `section_info` URI is often the same for every
+    /// track. Returning nil for that response leaves the diffable data source
+    /// with the old item, so the external payload is not rendered until the
+    /// whole NPV UI is recreated. Rewrite the existing section in place and
+    /// preserve its position and all unrelated fields.
     static func injectLyricsSectionIfMissing(_ data: Data, url: URL) -> Data? {
         guard shouldHandle(url) else { return nil }
 
@@ -131,6 +300,13 @@ enum ScrollsitaLyricsCardPatcher {
             $0.number == 1 && $0.wireType == 2
         }
 
+        // Prefer the request URL, then the most recent request context. The
+        // response body may contain recommendation/queue URIs, so it is only
+        // used as the final fallback by responseTrackID().
+        let trackID = responseTrackID(data, url: url)
+        let currentTrackURI = trackID.map { "spotify:track:\($0)" }
+        let currentSectionURI = trackID.map { "spotify:section:\($0)" }
+
         for (sectionIndex, sectionField) in sectionFields.enumerated() {
             guard let sectionStart = sectionField.payloadStart,
                   let sectionEnd = sectionField.payloadEnd,
@@ -143,15 +319,55 @@ enum ScrollsitaLyricsCardPatcher {
                 let nativeSection = Data(bytes[sectionStart..<sectionEnd])
                 cacheNativeLyricsSection(nativeSection, index: sectionIndex)
                 let shape = sectionFields.map { "\($0.number):\($0.wireType)" }.joined(separator: ",")
-                writeDebugLog("[ScrollsitaLyrics] native lyrics section index=\(sectionIndex) fields=[\(shape)] bytes=\(nativeSection.base64EncodedString()) path=\(url.path)")
-                return nil
+
+                guard let trackURI = currentTrackURI,
+                      let sectionURI = currentSectionURI else {
+                    writeDebugLog("[ScrollsitaLyrics] native section kept: current track ID unavailable index=\(sectionIndex) path=\(url.path)")
+                    return nil
+                }
+
+                guard let rewrittenSection = lyricsSection(
+                    from: [UInt8](nativeSection),
+                    trackURI: trackURI,
+                    sectionURI: sectionURI
+                ) else {
+                    writeDebugLog("[ScrollsitaLyrics] native section kept: rewrite failed index=\(sectionIndex) fields=[\(shape)] path=\(url.path)")
+                    return nil
+                }
+
+                let originalSection = [UInt8](nativeSection)
+                guard rewrittenSection != originalSection else {
+                    let logTrackID = trackID ?? "?"
+                    writeDebugLog("[ScrollsitaLyrics] native section already current index=\(sectionIndex) track=\(logTrackID) fields=[\(shape)] path=\(url.path)")
+                    return nil
+                }
+
+                var replacement = [UInt8]()
+                appendMessageField(number: 1, payload: rewrittenSection, to: &replacement)
+
+                let relativeStart = sectionField.fieldStart - structureStart
+                let relativeEnd = sectionField.fieldEnd - structureStart
+                var newStructure = Array(bytes[structureStart..<structureEnd])
+                newStructure.replaceSubrange(relativeStart..<relativeEnd, with: replacement)
+
+                guard let result = replacingStructure(
+                    in: bytes,
+                    structureField: structureField,
+                    structure: newStructure
+                ) else {
+                    let logTrackID = trackID ?? "?"
+                    writeDebugLog("[ScrollsitaLyrics] native section rewrite could not rebuild response index=\(sectionIndex) track=\(logTrackID) path=\(url.path)")
+                    return nil
+                }
+
+                let logTrackID = trackID ?? "?"
+                writeDebugLog("[ScrollsitaLyrics] rewrote lower lyrics card existingSection=true uniqueSection=true track=\(logTrackID) index=\(sectionIndex) \(data.count)->\(result.count) path=\(url.path)")
+                return result
             }
         }
 
         // Prefer request identity over arbitrary entity URIs embedded in card
         // payloads (recommendations and queue sections contain other tracks).
-        let trackID = responseTrackID(data, url: url)
-
         guard let trackID = trackID else {
             writeDebugLog("[ScrollsitaLyrics] skipped injection: current track ID unavailable path=\(url.path)")
             return nil
@@ -218,14 +434,46 @@ enum ScrollsitaLyricsCardPatcher {
         return Data(result)
     }
 
+    private static func replacingStructure(
+        in bytes: [UInt8],
+        structureField: WireField,
+        structure: [UInt8]
+    ) -> Data? {
+        guard let lengthStart = structureField.lengthStart else { return nil }
+
+        var result = Array(bytes[..<lengthStart])
+        result.append(contentsOf: encodeVarint(UInt64(structure.count)))
+        result.append(contentsOf: structure)
+        result.append(contentsOf: bytes[structureField.fieldEnd...])
+        return Data(result)
+    }
+
     private static func recentCurrentTrackID() -> String? {
         contextLock.lock()
         defer { contextLock.unlock() }
 
-        let contexts = [latestLyricsRequest, latestScrollsitaRequest].compactMap { $0 }
-        guard let context = contexts.max(by: { $0.timestamp < $1.timestamp }),
-              Date().timeIntervalSince(context.timestamp) <= currentTrackLifetime else { return nil }
-        return context.id
+        let now = Date()
+
+        if let playback = latestPlaybackTrack,
+           now.timeIntervalSince(playback.timestamp) <= currentTrackLifetime {
+            return playback.id
+        }
+
+        // Scrollsita describes the visible NPV entity. It is deliberately
+        // preferred over a later-resumed color-lyrics task: during a fast
+        // transition Spotify can resume the previous track's lyrics request
+        // after it has already started the new Scrollsita request. Choosing
+        // whichever callback happened last would resurrect the old track.
+        if let scroll = latestScrollsitaRequest,
+           now.timeIntervalSince(scroll.timestamp) <= currentTrackLifetime {
+            return scroll.id
+        }
+
+        guard let lyrics = latestLyricsRequest,
+              now.timeIntervalSince(lyrics.timestamp) <= currentTrackLifetime else {
+            return nil
+        }
+        return lyrics.id
     }
 
     private static func cacheNativeLyricsSection(_ section: Data, index: Int) {

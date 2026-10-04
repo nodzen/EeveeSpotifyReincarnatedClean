@@ -8,7 +8,9 @@ struct LyricsDto {
     
     func toSpotifyLyricsData(source: String) -> LyricsData {
         var lyricsData = LyricsData.with {
-            $0.timeSynchronized = timeSynced
+            $0.timeSynchronized = timeSynced && !lines.isEmpty
+                && lines.allSatisfy { ($0.offsetMs ?? -1) >= 0 }
+                && Set(lines.compactMap(\.offsetMs)).count > 1
             $0.restriction = .unrestricted
             $0.providedBy = "\(source) (EeveeSpotify)"
         }
@@ -16,12 +18,12 @@ struct LyricsDto {
         let shouldRomanize = UserDefaults.lyricsOptions.romanization
         
         if lines.isEmpty {
+            // Reached when every provider failed or nothing was found. That
+            // says nothing about the track being instrumental, so use a
+            // neutral unavailable message instead.
             lyricsData.lines = [
                 LyricsLine.with {
-                    $0.content = "song_is_instrumental".localized
-                },
-                LyricsLine.with {
-                    $0.content = "let_the_music_play".localized
+                    $0.content = "lyrics_not_found".localized
                 },
                 LyricsLine.with {
                     $0.content = ""
@@ -29,15 +31,16 @@ struct LyricsDto {
             ]
         }
         else {
-            let sortedLines = lines.sorted { 
-                ($0.offsetMs ?? 0) < ($1.offsetMs ?? 0)
-            }
+            let sortedLines = lyricsData.timeSynchronized
+                ? lines.sorted { ($0.offsetMs ?? 0) < ($1.offsetMs ?? 0) }
+                : lines
             lyricsData.lines = sortedLines.map { line in
                 LyricsLine.with {
                     $0.content = (shouldRomanize && romanization == .canBeRomanized)
                         ? line.content.applyingTransform(.toLatin, reverse: false)!
                         : line.content
-                    $0.offsetMs = Int32(line.offsetMs ?? 0)
+                    $0.offsetMs = lyricsData.timeSynchronized
+                        ? Int32(clamping: line.offsetMs ?? 0) : 0
                 }
             }
         }

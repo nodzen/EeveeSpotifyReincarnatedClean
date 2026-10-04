@@ -20,6 +20,7 @@ final class KaraokePlaybackTracker {
     private var lastTrackId: String?
 
     private var didDumpStateShape = false
+    private var didDumpTrackShape = false
 
     private init() {}
 
@@ -57,6 +58,13 @@ final class KaraokePlaybackTracker {
         }
 
         let trackObj = safeValue("track") as AnyObject?
+        if let object = trackObj as? NSObject {
+            if !didDumpTrackShape {
+                didDumpTrackShape = true
+                karaokeDumpClassMethods("playbackTrack", of: object)
+            }
+            captureLyricsPlaybackTrack(object)
+        }
         let uriObj: Any? = trackObj.flatMap { obj -> Any? in
             guard obj.responds(to: NSSelectorFromString("URI")) else { return nil }
             return obj.value(forKey: "URI")
@@ -84,6 +92,10 @@ final class KaraokePlaybackTracker {
             self.lastIsPlaying = isPlaying
             if let trackId = trackId, !trackId.isEmpty {
                 self.lastTrackId = trackId
+                if ScrollsitaLyricsCardPatcher.notePlaybackTrack(trackId) {
+                    writeDebugLog("[LyricsPlayback] changed track=\(trackId); starting provider prefetch")
+                    prefetchLyricsIfNeeded(trackId: trackId)
+                }
             }
         }
     }

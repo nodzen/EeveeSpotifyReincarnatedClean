@@ -28,16 +28,7 @@ extension Color {
     }
 
     var components: (red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat) {
-        var r: CGFloat = 0
-        var g: CGFloat = 0
-        var b: CGFloat = 0
-        var a: CGFloat = 0
-
-        guard UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a) else {
-            return (0, 0, 0, 0)
-        }
-
-        return (r, g, b, a)
+        UIColor(self).eeveeRGBAComponents ?? (0, 0, 0, 1)
     }
 
     func lighter(by amount: CGFloat = 0.2) -> Self { Self(UIColor(self).lighter(by: amount)) }
@@ -52,9 +43,21 @@ extension Color {
     }
 
     func normalized(_ by: CGFloat) -> Color {
-        brightness < 0.5
-            ? self.lighter(by: max(by - brightness, 0))
-            : self.darker(by: max(brightness - by, 0))
+        let target = min(max(by, 0), 1)
+        let current = brightness
+        guard abs(current - target) > 0.001 else { return self }
+
+        // Mixing with white/black by the raw brightness difference does not
+        // reach the requested target and makes the slider appear ineffective.
+        // Because brightness is a linear weighted sum, this amount reaches
+        // the target while preserving the hue as much as RGB mixing allows.
+        if current < target {
+            let amount = (target - current) / max(1 - current, 0.001)
+            return self.lighter(by: amount)
+        }
+
+        let amount = (current - target) / max(current, 0.001)
+        return self.darker(by: amount)
     }
     
     var hexString: String {
@@ -73,4 +76,3 @@ extension Color {
             | UInt32(components.blue * 255)
     }
 }
-

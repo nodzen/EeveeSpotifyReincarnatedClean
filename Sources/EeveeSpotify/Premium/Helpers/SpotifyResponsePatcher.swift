@@ -102,25 +102,25 @@ enum SpotifyResponsePatcher {
         }
         if BrowsitaSectionStripper.shouldHandle(url) {
             var candidate = buffer
-            var injectedLyrics = false
+            var patchedLyrics = false
 
             // Spotify 9.1.x omits the lower Lyrics card from its Scrollsita
             // structure when the catalog has no native lyrics. The external
             // color-lyrics payload is valid in that case, but has no UI surface
             // to render into until this structure entry exists.
             if BaseLyricsGroup.isActive,
-               let injected = ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissing(
+               let patched = ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissing(
                    candidate,
                    url: url
                ) {
-                candidate = injected
-                injectedLyrics = true
+                candidate = patched
+                patchedLyrics = true
             }
 
             if let stripped = BrowsitaSectionStripper.strip(candidate, url: url) {
                 return PatchResult(data: stripped, tag: .casitaStrip)
             }
-            if injectedLyrics {
+            if patchedLyrics {
                 return PatchResult(data: candidate, tag: .scrollsitaLyrics)
             }
             return nil

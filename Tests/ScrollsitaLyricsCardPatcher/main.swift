@@ -149,9 +149,19 @@ require(addedFields?.contains(where: { $0.number == 1 || $0.number == 6 }) == fa
 require(ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissing(injected, url: scrollURL) == nil,
         "patching must be idempotent")
 
-let native = response(sections: [section(id: "lyrics", lyricsTrackID: trackID)])
-require(ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissing(native, url: scrollURL) == nil,
-        "a native lyrics section must never be duplicated")
+let native = response(sections: [section(id: "lyrics", lyricsTrackID: anotherTrackID)])
+guard let nativeRewritten = ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissing(native, url: scrollURL),
+      let nativeRewrittenSection = decodedSections(nativeRewritten)?.first,
+      let nativeRewrittenLyrics = fields(nativeRewrittenSection)?.first(where: { $0.number == 5 })?.payload,
+      let nativeRewrittenEntity = fields(nativeRewrittenLyrics)?.first(where: { $0.number == 1 })?.payload else {
+    fatalError("FAIL: existing native lyrics section was not rewritten")
+}
+require(nativeRewrittenEntity == Data("spotify:track:\(trackID)".utf8),
+        "existing lyrics section must follow the current track")
+require(fields(nativeRewrittenSection)?.first(where: { $0.number == 23 })?.payload.flatMap(fields)?.first(where: { $0.number == 1 })?.payload == Data("spotify:section:\(trackID)".utf8),
+        "existing lyrics section must receive a per-track section ID")
+require(ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissing(nativeRewritten, url: scrollURL) == nil,
+        "rewriting an already-current section must be idempotent")
 
 var merch = section(id: "merch")
 merch.append(lengthDelimited(6, string(1, "spotify:track:\(trackID)")))
@@ -200,5 +210,29 @@ require(contextEntity == Data("spotify:track:\(anotherTrackID)".utf8),
 
 require(ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissing(Data([0x0a, 0xff]), url: scrollURL) == nil,
         "malformed protobuf must fail closed")
+
+// A late-resumed old color-lyrics task must not override the newer visible
+// Scrollsita entity. This is the ordering that occurs during rapid skips.
+let newerTrackID = "3AZeZnyGoMwAskpvCrBrqc"
+let newerScrollURL = URL(string: "https://spclient.wg.spotify.com/scrollsita/v1/scroll/spotify:track:\(newerTrackID)")!
+let newerLyricsURL = URL(string: "https://spclient.wg.spotify.com/color-lyrics/v2/track/\(newerTrackID)")!
+ScrollsitaLyricsCardPatcher.noteScrollsitaRequest(URLRequest(url: newerScrollURL))
+ScrollsitaLyricsCardPatcher.noteLyricsRequest(staleLyricsURL)
+require(ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(newerLyricsURL),
+        "visible Scrollsita track must remain authoritative over a late old lyrics task")
+require(!ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(staleLyricsURL),
+        "late old lyrics task must stay suppressed after a visible track change")
+
+// Playback can change without either Spotify endpoint being requested.
+require(ScrollsitaLyricsCardPatcher.notePlaybackTrack(trackID), "first playback observation is a change")
+require(!ScrollsitaLyricsCardPatcher.notePlaybackTrack(trackID), "position updates must not refetch")
+ScrollsitaLyricsCardPatcher.noteScrollsitaRequest(URLRequest(url: newerScrollURL))
+ScrollsitaLyricsCardPatcher.noteLyricsRequest(newerLyricsURL)
+require(ScrollsitaLyricsCardPatcher.currentTrackID() == trackID,
+        "late network requests must not override observed playback")
+require(ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(staleLyricsURL),
+        "playback prefetch must work without a new Spotify request")
+require(ScrollsitaLyricsCardPatcher.notePlaybackTrack(anotherTrackID), "next playback must trigger prefetch")
+require(ScrollsitaLyricsCardPatcher.notePlaybackTrack(trackID), "returning to a track must trigger prefetch")
 
 print("ScrollsitaLyricsCardPatcher regression tests passed")

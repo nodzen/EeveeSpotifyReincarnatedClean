@@ -172,8 +172,15 @@ class LrclibLyricsRepository: LyricsRepository {
         }
 
         if song.instrumental {
+            // An actual instrumental flag must survive the empty-lines miss
+            // check in the provider layer, so emit the message explicitly
+            // instead of an empty LyricsDto.
             return LyricsDto(
-                lines: [],
+                lines: [
+                    LyricsLineDto(content: "song_is_instrumental".localized),
+                    LyricsLineDto(content: "let_the_music_play".localized),
+                    LyricsLineDto(content: "")
+                ],
                 timeSynced: false,
                 romanization: .original
             )
@@ -182,7 +189,16 @@ class LrclibLyricsRepository: LyricsRepository {
         if let syncedLyrics = song.syncedLyrics, !syncedLyrics.isEmpty {
             let lines = splitLyricsLines(syncedLyrics)
             let mappedLines = mapSyncedLyricsLines(lines)
-            if !mappedLines.isEmpty {
+            // Metadata tags ([ti:], [ar:], [offset:], [length:]) and blank
+            // lines are intentionally not mapped. Only count lines that must
+            // produce a timed verse, otherwise a partially parsed LRC would
+            // advertise itself as fully synchronized.
+            let expectedSyncLines = lines.filter { line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.isEmpty else { return false }
+                return trimmed.range(of: "^\\[[A-Za-z#]", options: .regularExpression) == nil
+            }.count
+            if !mappedLines.isEmpty, mappedLines.count == expectedSyncLines {
                 writeDebugLog("[LRCLIB] Loaded \(mappedLines.count) synced lines for \(query.spotifyTrackId)")
                 return LyricsDto(
                     lines: mappedLines,
@@ -190,6 +206,7 @@ class LrclibLyricsRepository: LyricsRepository {
                     romanization: lines.canBeRomanized ? .canBeRomanized : .original
                 )
             }
+            writeDebugLog("[LRCLIB] Incomplete timing data for \(query.spotifyTrackId); using plain lyrics")
         }
         
         guard let plainLyrics = song.plainLyrics, !plainLyrics.isEmpty else {
