@@ -68,6 +68,10 @@ class ListeningActivityUserDefaultsHook: ClassHook<NSObject> {
 
     @objc(setObject:forKey:)
     func setObject(_ value: Any?, forKey key: NSString) {
+        let lowered = (key as String).lowercased()
+        if lowered.contains("activity") {
+            writeDebugLog("[LISTENING-HOOK] setObject key=\(key) value=\(String(describing: value))")
+        }
         guard ListeningActivityPrivacyPolicy.isListeningActivityKey(listeningActivityKey(key)) else {
             orig.setObject(value, forKey: key)
             return
@@ -102,6 +106,10 @@ class ListeningActivityUserDefaultsHook: ClassHook<NSObject> {
 
     @objc(removeObjectForKey:)
     func removeObjectForKey(_ key: NSString) {
+        let lowered = (key as String).lowercased()
+        if lowered.contains("activity") {
+            writeDebugLog("[LISTENING-HOOK] removeObject key=\(key)")
+        }
         guard ListeningActivityPrivacyPolicy.isListeningActivityKey(listeningActivityKey(key)) else {
             orig.removeObjectForKey(key)
             return
