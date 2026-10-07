@@ -49,9 +49,7 @@ struct EeveeSettingsView: View {
                     }
                 )
             }
-            
-            //
-            
+
             Button {
                 pushSettingsController(
                     with: EeveePatchingSettingsView(),
@@ -145,9 +143,7 @@ struct EeveeSettingsView: View {
                 )
             }
 
-            //
-
-            Section(header: Text("debug_title".localized), footer: Text("debug_section_footer".localized)) {
+            DisclosureGroup("debug_title".localized) {
                 Toggle(
                     "debug_file_logging".localized,
                     isOn: $debugLoggingEnabled

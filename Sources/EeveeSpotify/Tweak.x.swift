@@ -192,7 +192,7 @@ func eeveeBreadcrumb(_ label: String) {
 }
 
 struct EeveeSpotify: Tweak {
-    static let version = "6.7.2"
+    static let version = "6.7.3"
     static let repoSlug = GeneratedConfig.repoSlug
 
     static var spotifyVersion: String {
@@ -272,15 +272,11 @@ struct EeveeSpotify: Tweak {
             return
         }
 
-        // Keep Listening Activity account-scoped and native: ON is untouched;
-        // after OFF the setting is persisted in Spotify's own local settings
-        // store and Spotify's publisher receives the same OFF value.
-        activateListeningActivityPrivacy()
-
         // Best-effort disablement of embedded analytics SDK collection. The
         // URLSession classifier is still required because SDK initialization
         // order and available selectors vary across Spotify builds.
         disableKnownSpotifyAnalyticsCollection()
+        hardenEmbeddedDiagnosticsDefaults()
 
         // Local-only premium force. Activated first after the recovery kill-switch,
         // before version gating. Independent of patchType / bootstrap
@@ -309,6 +305,9 @@ struct EeveeSpotify: Tweak {
         // Block ClientMessagingPlatform marketing surfaces (9.1.84 win-back
         // fullscreen takeover and Home Premium banner) and their element views.
         activateClientMessagingPlatformBlocker()
+
+        // Suppress the App Store "Enjoying Spotify?" rating prompt.
+        activateRatingPromptBlocker()
 
         // Block upsell components injected into Hub/home JSON (e.g. upgrade banners).
         if let hub = NSClassFromString("HUBViewModelBuilderImplementation"),

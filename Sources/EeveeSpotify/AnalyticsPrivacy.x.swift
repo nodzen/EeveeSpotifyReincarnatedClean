@@ -81,3 +81,14 @@ func disableKnownSpotifyAnalyticsCollection() {
         writeDebugLog("[PRIVACY] Disabled SDK collection: " + disabled.joined(separator: ", "))
     }
 }
+
+/// These Feature-Control defaults are seeded from a remote config blob; once
+/// forced to off in the shared defaults, the EventSender/Observability startup
+/// pings are skipped for the rest of the session without needing a hook.
+func hardenEmbeddedDiagnosticsDefaults() {
+    let defaults = UserDefaults.standard
+    defaults.set(false, forKey: "EventSenderSDK.sendEventsOnStartup")
+    defaults.set(false, forKey: "enable-service-system-perf-tracker")
+    defaults.set(false, forKey: "ObservabilityPlatformEnabledFromRCProperty")
+    defaults.set(0, forKey: "AdsFetchOopsSamplingRateBps")
+}

@@ -18,6 +18,7 @@ extension UserDefaults {
     private static let cleanShareLinksKey = "cleanShareLinks"
     private static let blockSpotifyAnalyticsKey = "blockSpotifyAnalytics"
     private static let debugLoggingEnabledKey = "debugLoggingEnabled"
+    private static let blockRatingPromptsKey = "blockRatingPrompts"
 
     static var musixmatchToken: String {
         get {
@@ -131,6 +132,16 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: blockSpotifyAnalyticsKey)
+        }
+    }
+
+    /// Suppresses the App Store rating prompt.
+    static var blockRatingPrompts: Bool {
+        get {
+            container.object(forKey: blockRatingPromptsKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: blockRatingPromptsKey)
         }
     }
 

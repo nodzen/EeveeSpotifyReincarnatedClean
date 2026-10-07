@@ -209,6 +209,25 @@ extension URL {
             return true
         }
 
+        // Third-party analytics SDK uploads (Segment, App Measurement,
+        // Google Analytics, DoubleClick, Facebook activities, Branch event
+        // ingestion). None of these are Spotify auth/content endpoints.
+        if host == "app-measurement.com" ||
+           host.hasSuffix(".app-measurement.com") ||
+           host == "segment.io" ||
+           host.hasSuffix(".segment.io") ||
+           host == "zqtk.net" ||
+           host == "google-analytics.com" ||
+           host.hasSuffix(".google-analytics.com") ||
+           host == "doubleclick.net" ||
+           host.hasSuffix(".doubleclick.net") ||
+           host == "ep1.facebook.com" ||
+           host == "ep2.facebook.com" ||
+           (host == "facebook.com" && path.hasPrefix("/activities")) ||
+           (host.hasSuffix(".branch.io") && path.contains("/v1/event")) {
+            return true
+        }
+
         // Google ad attribution and Cast/Google logging. Do not block OAuth
         // endpoints on googleapis.com; only these exact logging destinations.
         if host == "www.googleadservices.com" &&

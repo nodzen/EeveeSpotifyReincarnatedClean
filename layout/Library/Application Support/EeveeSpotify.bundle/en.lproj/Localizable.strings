@@ -312,3 +312,5 @@ managingSegmentsSectionDeps2 = "Settings → 'Reporting & drafts' holds your in-
 categoriesTitle = "Categories";
 categoriesSectionTitle1 = "Per-category actions";
 categoriesSectionDeps1 = "Off = ignore. Show = draw on the bar only. Manual = prompt before skipping. Auto = skip silently.";
+block_rating_prompts = "Block Rating Prompts";
+block_rating_prompts_description = "Suppresses the in-app App Store rating prompt. Restart Spotify after changing.";

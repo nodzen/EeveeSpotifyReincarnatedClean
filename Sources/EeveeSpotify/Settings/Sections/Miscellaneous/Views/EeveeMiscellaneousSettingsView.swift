@@ -3,6 +3,7 @@ import UIKit
 
 struct EeveeMiscellaneousSettingsView: View {
     @State var blockSpotifyAnalytics = UserDefaults.blockSpotifyAnalytics
+    @State var blockRatingPrompts = UserDefaults.blockRatingPrompts
 
     var body: some View {
         List {
@@ -22,10 +23,20 @@ struct EeveeMiscellaneousSettingsView: View {
                     isOn: $blockSpotifyAnalytics
                 )
             }
+
+            Section(footer: Text("block_rating_prompts_description".localized)) {
+                Toggle(
+                    "block_rating_prompts".localized,
+                    isOn: $blockRatingPrompts
+                )
+            }
         }
         .listStyle(GroupedListStyle())
         .onChange(of: blockSpotifyAnalytics) { enabled in
             UserDefaults.blockSpotifyAnalytics = enabled
+        }
+        .onChange(of: blockRatingPrompts) { enabled in
+            UserDefaults.blockRatingPrompts = enabled
         }
     }
 }

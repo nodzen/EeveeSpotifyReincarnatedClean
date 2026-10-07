@@ -166,3 +166,5 @@ debug_log_cleared_ok = "ОК";
 no_debug_log_found = "Отладочный лог не найден. Включите запись и воспроизведите проблему.";
 no_debug_log_found_ok = "ОК";
 debug_section_footer = "Включите запись, воспроизведите проблему и экспортируйте лог.";
+block_rating_prompts = "Блокировать запрос оценки";
+block_rating_prompts_description = "Подавляет внутриигровой запрос оценить приложение в App Store. После изменения перезапустите Spotify.";
