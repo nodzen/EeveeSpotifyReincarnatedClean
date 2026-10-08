@@ -28,6 +28,8 @@ wrapper/
 modules/zxPluginsInject/.theos/
 modules/zxPluginsInject/packages/
 
+tmp/
+
 # logs / editor state
 *.log
 build_log.txt
