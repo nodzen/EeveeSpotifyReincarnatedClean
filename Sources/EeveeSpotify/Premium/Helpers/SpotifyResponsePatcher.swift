@@ -9,7 +9,11 @@ enum SpotifyResponsePatcher {
     // URLSession's concurrent delegate queues — all access is lock-guarded.
     private static let lock = NSLock()
     private static var _cachedCustomizeData: Data?
-    private static var _handledCustomizeTasks = Set<Int>()
+    // Keyed by task object, not bare taskIdentifier: identifiers restart per
+    // URLSession, so a stale Int mark silently swallowed an innocent later
+    // task (lyrics/scrollsita) whose completion then delivered no body. The
+    // task is retained here so its address cannot be reused while marked.
+    private static var _handledCustomizeTasks = [ObjectIdentifier: URLSessionTask]()
     private static let syntheticLyricsTasks = SyntheticLyricsTaskTracker()
 
     static var cachedCustomizeData: Data? {
@@ -17,15 +21,15 @@ enum SpotifyResponsePatcher {
         set { lock.lock(); defer { lock.unlock() }; _cachedCustomizeData = newValue }
     }
 
-    static func markCustomizeTaskHandled(_ id: Int) {
+    static func markCustomizeTaskHandled(_ task: URLSessionTask) {
         lock.lock(); defer { lock.unlock() }
-        _handledCustomizeTasks.insert(id)
+        _handledCustomizeTasks[ObjectIdentifier(task)] = task
     }
 
-    // Returns true exactly once per id (the task that synthesized the replay).
-    static func consumeCustomizeTask(_ id: Int) -> Bool {
+    // Returns true exactly once per task (the task that synthesized the replay).
+    static func consumeCustomizeTask(_ task: URLSessionTask) -> Bool {
         lock.lock(); defer { lock.unlock() }
-        return _handledCustomizeTasks.remove(id) != nil
+        return _handledCustomizeTasks.removeValue(forKey: ObjectIdentifier(task)) != nil
     }
 
     static func markSyntheticLyricsTask(_ task: URLSessionTask) {

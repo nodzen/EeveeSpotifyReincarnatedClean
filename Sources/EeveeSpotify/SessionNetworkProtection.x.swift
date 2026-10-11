@@ -32,6 +32,12 @@ class URLSessionTaskResumeHook: ClassHook<NSObject> {
                 }
             }
 
+            // Correlate request -> response -> completion for the two URLs whose
+            // completions have gone silent in the field.
+            if url.isLyrics || ScrollsitaLyricsCardPatcher.shouldHandle(url) {
+                writeDebugLog("[NET] resume task=\(task.taskIdentifier) path=\(url.path)")
+            }
+
             guard let host = url.host?.lowercased() else {
                 orig.resume()
                 return

@@ -18,6 +18,10 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
         }
 
         guard let url = task.currentRequest?.url else {
+            if let fallback = task.originalRequest?.url,
+               fallback.isLyrics || ScrollsitaLyricsCardPatcher.shouldHandle(fallback) {
+                writeDebugLog("[HCUS] completion without currentRequest path=\(fallback.path) (taskId=\(task.taskIdentifier))")
+            }
             orig.URLSession(session, task: task, didCompleteWithError: error)
             return
         }
@@ -65,7 +69,8 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
             return
         }
 
-        if SpotifyResponsePatcher.consumeCustomizeTask(task.taskIdentifier) {
+        if SpotifyResponsePatcher.consumeCustomizeTask(task) {
+            writeDebugLog("[HCUS] suppressed duplicate customize completion (taskId=\(task.taskIdentifier))")
             orig.URLSession(session, task: task, didCompleteWithError: nil)
             return
         }
@@ -82,6 +87,9 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
         }
 
         guard error == nil, SpotifyResponsePatcher.shouldModify(url) else {
+            if error != nil, url.isLyrics || ScrollsitaLyricsCardPatcher.shouldHandle(url) {
+                writeDebugLog("[HCUS] dropping \(url.path) completion error=\((error as? NSError)?.code ?? -1) (taskId=\(task.taskIdentifier))")
+            }
             orig.URLSession(session, task: task, didCompleteWithError: error)
             return
         }
@@ -181,6 +189,12 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
         didReceiveResponse response: HTTPURLResponse,
         completionHandler handler: @escaping (URLSession.ResponseDisposition) -> Void
     ) {
+        // Decisive signal: does the response reach the hook at all?
+        if let diagURL = task.currentRequest?.url,
+           diagURL.isLyrics || ScrollsitaLyricsCardPatcher.shouldHandle(diagURL) {
+            writeDebugLog("[HCUS] response task=\(task.taskIdentifier) status=\(response.statusCode) path=\(diagURL.path)")
+        }
+
         if let url = task.currentRequest?.url, url.isCustomize, response.statusCode == 304,
            let cached = SpotifyResponsePatcher.cachedCustomizeData {
             guard let synthetic = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "2.0", headerFields: [:]) else {
@@ -189,7 +203,7 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
             }
             orig.URLSession(session, dataTask: task, didReceiveResponse: synthetic, completionHandler: handler)
             orig.URLSession(session, dataTask: task, didReceiveData: cached)
-            SpotifyResponsePatcher.markCustomizeTaskHandled(task.taskIdentifier)
+            SpotifyResponsePatcher.markCustomizeTaskHandled(task)
             return
         }
 

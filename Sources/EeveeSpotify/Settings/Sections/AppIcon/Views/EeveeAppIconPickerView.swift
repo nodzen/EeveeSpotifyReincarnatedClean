@@ -144,17 +144,33 @@ struct EeveeAppIconPickerView: View {
     }
 
     private func apply(_ icon: AppIconEntry) {
-        guard UIApplication.shared.supportsAlternateIcons else {
-            errorMessage = "Alternate icons are not supported on this device."
-            return
-        }
         let previous = selectedKey
         selectedKey = icon.id
         UserDefaults.standard.set(icon.id, forKey: selectedKeyDefault)
 
+        // Containers like LiveContainer run this code under their own
+        // Info.plist, so setAlternateIconName cannot resolve the alternate
+        // icons. Such hosts read a hosted app's icon from cache files next
+        // to its Info.plist instead — write the chosen icon there as well.
+        let appliedViaIconFiles = Self.writeContainerIconCache(for: icon)
+
+        guard UIApplication.shared.supportsAlternateIcons else {
+            if !appliedViaIconFiles {
+                selectedKey = previous
+                UserDefaults.standard.set(previous, forKey: selectedKeyDefault)
+                errorMessage = "Alternate icons are not supported on this device."
+            }
+            return
+        }
+
         UIApplication.shared.setAlternateIconName(icon.alternateName) { error in
             DispatchQueue.main.async {
                 guard let error = error else { return }
+                if appliedViaIconFiles {
+                    NSLog("[EeveeSpotify][AppIcon] setAlternateIconName(%@) failed; icon applied via bundle icon cache files",
+                          icon.alternateName ?? "nil")
+                    return
+                }
                 NSLog("[EeveeSpotify][AppIcon] setAlternateIconName(%@) failed: %@",
                       icon.alternateName ?? "nil", error.localizedDescription)
                 selectedKey = previous
@@ -162,6 +178,29 @@ struct EeveeAppIconPickerView: View {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    /// LiveContainer shows a hosted app's icon from `LCAppIconLight.png` /
+    /// `LCAppIconDark.png` inside its bundle directory. Writing the selected
+    /// icon there makes the container pick it up; for an unresolvable default
+    /// icon, drop any cached files so the container regenerates them.
+    private static func writeContainerIconCache(for icon: AppIconEntry) -> Bool {
+        let dir = Bundle.main.bundlePath as NSString
+        let light = dir.appendingPathComponent("LCAppIconLight.png")
+        let dark = dir.appendingPathComponent("LCAppIconDark.png")
+
+        guard let image = image(for: icon) else {
+            let fm = FileManager.default
+            try? fm.removeItem(atPath: light)
+            try? fm.removeItem(atPath: dark)
+            return false
+        }
+
+        guard let data = image.pngData() else { return false }
+        let lightOK = (try? data.write(to: URL(fileURLWithPath: light))) != nil
+        let darkOK = (try? data.write(to: URL(fileURLWithPath: dark))) != nil
+        NSLog("[EeveeSpotify][AppIcon] container icon cache write light=\(lightOK) dark=\(darkOK) name=\(icon.id)")
+        return lightOK || darkOK
     }
 
     /// Converts a raw plist key into a readable display title.
