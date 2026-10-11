@@ -235,4 +235,32 @@ require(ScrollsitaLyricsCardPatcher.shouldDeliverLyricsResponse(staleLyricsURL),
 require(ScrollsitaLyricsCardPatcher.notePlaybackTrack(anotherTrackID), "next playback must trigger prefetch")
 require(ScrollsitaLyricsCardPatcher.notePlaybackTrack(trackID), "returning to a track must trigger prefetch")
 
+// "Hide on error" must remove the card itself, not render it empty.
+ScrollsitaLyricsCardPatcher.installLyricsCardHiddenProvider { _ in true }
+let hiddenNative = response(sections: [
+    section(id: "queue", marker: "spotify:track:\(trackID)"),
+    section(id: "lyrics", lyricsTrackID: trackID),
+    section(id: "recommendations", marker: "spotify:track:\(anotherTrackID)")
+], trailing: responseSuffix)
+guard let withoutCard = ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissing(hiddenNative, url: scrollURL),
+      let remainingSections = decodedSections(withoutCard) else {
+    fatalError("FAIL: hideOnError must return a structure without the lyrics card")
+}
+require(remainingSections.count == 2, "hideOnError must drop only the lyrics section")
+require(remainingSections[0] == section(id: "queue", marker: "spotify:track:\(trackID)"),
+        "sections before the lyrics card must stay byte-for-byte unchanged")
+require(remainingSections[1] == section(id: "recommendations", marker: "spotify:track:\(anotherTrackID)"),
+        "sections after the lyrics card must stay byte-for-byte unchanged")
+require(withoutCard.suffix(responseSuffix.count) == responseSuffix,
+        "top-level fields after structure must survive a removed card")
+
+let hiddenInjection = response(sections: [ordinarySection])
+require(ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissing(hiddenInjection, url: scrollURL) == nil,
+        "hideOnError must not create a lyrics card when none exists")
+
+ScrollsitaLyricsCardPatcher.installLyricsCardHiddenProvider { _ in false }
+
+require(ScrollsitaLyricsCardPatcher.injectLyricsSectionIfMissing(original, url: scrollURL) != nil,
+        "the card must come back once the provider has lyrics")
+
 print("ScrollsitaLyricsCardPatcher regression tests passed")

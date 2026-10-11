@@ -55,8 +55,55 @@ private func updateLyricsState(
     lyricsStateLock.unlock()
 }
 
+/// Starts a fresh attempt for this track. A definitive "no lyrics anywhere"
+/// answer from an earlier attempt is deliberately kept: repeated lookups are
+/// normal (every Now Playing surface starts its own), and dropping the answer
+/// mid-race is what let the lyrics card come back after "hide on error" had
+/// already decided to remove it. Transient errors are cleared — the attempt
+/// that replaces them decides again.
 private func resetLyricsState(for trackId: String) {
-    updateLyricsState(for: trackId) { $0 = LyricsLoadingState() }
+    updateLyricsState(for: trackId) { state in
+        let knownMissing = state.fallbackError == .noSuchSong
+        state = LyricsLoadingState()
+        state.fallbackError = knownMissing ? .noSuchSong : nil
+    }
+}
+
+/// True when the last lookup for this track ended without a payload, whatever
+/// the reason: a definitive miss, a timeout and a network error all deliver
+/// the same empty body, so all of them must answer "hide the card". A later
+/// success clears the error and the card comes back.
+func lyricsLookupFailed(_ trackId: String) -> Bool {
+    guard !trackId.isEmpty else { return false }
+    lyricsStateLock.lock()
+    defer { lyricsStateLock.unlock() }
+    return lyricsStatesByTrack[trackId]?.fallbackError != nil
+}
+
+/// True when a lookup for this track has already produced a usable payload.
+private func lyricsLookupAnswered(_ trackId: String) -> Bool {
+    guard !trackId.isEmpty else { return false }
+    lyricsStateLock.lock()
+    defer { lyricsStateLock.unlock() }
+    guard let state = lyricsStatesByTrack[trackId] else { return false }
+    return state.loadedSuccessfully || state.fallbackError != nil
+}
+
+/// Waits, bounded, while the lookup for this track has not answered yet, so a
+/// caller that has to decide whether to render the lyrics card sees the real
+/// outcome instead of guessing. The answer can come from a lookup that was
+/// already running or from one that starts a moment later (the playback
+/// prefetch and the response patch race on different queues), so the wait ends
+/// only when there is an answer *and* nothing is about to overwrite it.
+func awaitLyricsOutcome(trackId: String, timeout: TimeInterval = 2.0) {
+    guard !trackId.isEmpty, !Thread.isMainThread else { return }
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        if !lyricsFetchCoordinator.isFetching(trackId: trackId), lyricsLookupAnswered(trackId) {
+            return
+        }
+        usleep(50_000)
+    }
 }
 
 private func cachedLyricsMetadata(for trackId: String) -> (title: String, artist: String)? {
@@ -96,7 +143,11 @@ func captureLyricsPlaybackTrack(_ object: NSObject) {
        !title.isEmpty, !artist.isEmpty {
         storeLyricsMetadata(trackId: trackId, title: title, artist: artist)
     }
-    if let color = colorFromExtractedHex(string("extractedColorHex")) {
+    // 9.1.x renamed the accessor to `spt_extractedColorHex`; keeping the old
+    // name for pre-9.1 builds. This is the only per-track color Spotify hands
+    // us directly, so cache it here (track object in hand) instead of making
+    // the lyrics payload depend on artwork heuristics later.
+    if let color = colorFromExtractedHex(string("spt_extractedColorHex") ?? string("extractedColorHex")) {
         storeLyricsTrackColor(trackId: trackId, color: color)
     }
 }
@@ -122,7 +173,8 @@ private func storeLyricsTrackColor(trackId: String, color: UIColor) {
 private func colorFromExtractedHex(_ rawHex: String?) -> UIColor? {
     guard let rawHex else { return nil }
 
-    let hex = rawHex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+    var hex = rawHex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+    if hex.hasPrefix("0x") { hex = String(hex.dropFirst(2)) }
     guard hex.count == 6 || hex.count == 8,
           UInt64(hex, radix: 16) != nil else {
         return nil
@@ -136,6 +188,15 @@ private func staticLyricsColor(_ rawValue: String) -> Color? {
         return nil
     }
     return Color(hex: hex)
+}
+
+private func lyricsColorHex(_ packed: UInt32) -> String {
+    String(
+        format: "%02X%02X%02X",
+        (packed >> 16) & 0xFF,
+        (packed >> 8) & 0xFF,
+        packed & 0xFF
+    )
 }
 
 private func hasUsableLyricsColors(_ lyrics: Lyrics) -> Bool {
@@ -167,6 +228,7 @@ private func resolvedLyricsColors(
     if settings.displayOriginalColors,
        let originalLyrics,
        hasUsableLyricsColors(originalLyrics) {
+        writeDebugLog("[Lyrics] palette: native colors kept hex=" + lyricsColorHex(originalLyrics.colors.backgroundColor) + " track=" + (trackIdentifier ?? "?"))
         return originalLyrics.colors
     }
 
@@ -189,19 +251,25 @@ private func resolvedLyricsColors(
               let uiColor = readLyricsBackgroundColor(trackId: trackIdentifier) {
         background = Color(uiColor).normalized(settings.normalizationFactor)
     } else {
+        writeDebugLog("[Lyrics] palette: no track color resolved, using gray track=" + (trackIdentifier ?? "?"))
         background = Color.gray
     }
 
+    writeDebugLog("[Lyrics] palette background=" + background.hexString + " track=" + (trackIdentifier ?? "?"))
     return contrastingLyricsColors(for: background)
 }
 
 private func extractedTrackColor(_ track: SPTPlayerTrack) -> UIColor? {
-    if let object = track as? NSObject {
-        let selector = NSSelectorFromString("extractedColorHex")
-        if object.responds(to: selector),
-           let color = colorFromExtractedHex(track.extractedColorHex()) {
-            return color
-        }
+    // 9.1.x dropped `extractedColorHex` in favour of `spt_extractedColorHex`
+    // (verified against the runtime method list in the debug log). Probing only
+    // the old name is why every 9.1.x track fell through to the artwork path.
+    for selectorName in ["spt_extractedColorHex", "extractedColorHex"] {
+        guard let object = track as? NSObject else { break }
+        let selector = NSSelectorFromString(selectorName)
+        guard object.responds(to: selector),
+              let rawHex = object.perform(selector)?.takeUnretainedValue() as? String,
+              let color = colorFromExtractedHex(rawHex) else { continue }
+        return color
     }
 
     // Spotify 9.1.80 exposes the reliable color accessor on the metadata
@@ -287,12 +355,14 @@ private func readLyricsBackgroundColor(trackId: String) -> UIColor? {
     let result = LyricsBackgroundColorBox()
     let artworkResult = LyricsArtworkBox()
     let work = {
+        // Read both sources in a single hop: the artwork color below is the
+        // preferred palette (Spotify derives its own lyrics palettes from the
+        // cover), the metadata color is the deterministic fallback.
         if let track = statefulPlayer?.currentTrack(),
            track.URI().spt_trackIdentifier() == trackId,
            let color = extractedTrackColor(track) {
             storeLyricsTrackColor(trackId: trackId, color: color)
             result.store(color, source: "track-metadata")
-            return
         }
 
         // The player object and legacy background model are commonly absent
@@ -346,20 +416,24 @@ private func readLyricsBackgroundColor(trackId: String) -> UIColor? {
         }
     }
 
-    if let snapshot = result.load() {
-        storeLyricsTrackColor(trackId: trackId, color: snapshot.color)
-        writeDebugLog("[Lyrics] color source=\(snapshot.source) track=\(trackId)")
-        return snapshot.color
-    }
-
+    // Prefer the artwork-derived color: it is the same input Spotify's own
+    // color service uses, so it matches the native card far better than the
+    // deliberately desaturated metadata color. The metadata color stays as the
+    // deterministic fallback, so a busy main thread can never mean gray.
     if let artwork = artworkResult.load(),
        let color = AlbumArtColorExtractor.dominantColors(from: artwork, count: 1).first {
         storeLyricsTrackColor(trackId: trackId, color: color)
-        writeDebugLog("[Lyrics] color source=now-playing-artwork track=\(trackId)")
+        writeDebugLog("[Lyrics] color source=now-playing-artwork hex=" + Color(color).hexString + " track=" + trackId)
         return color
     }
 
-    writeDebugLog("[Lyrics] color source=unavailable track=\(trackId)")
+    if let snapshot = result.load() {
+        storeLyricsTrackColor(trackId: trackId, color: snapshot.color)
+        writeDebugLog("[Lyrics] color source=" + snapshot.source + " hex=" + Color(snapshot.color).hexString + " track=" + trackId)
+        return snapshot.color
+    }
+
+    writeDebugLog("[Lyrics] color source=unavailable track=" + trackId + "; card will fall back to gray")
     return nil
 }
 
@@ -529,8 +603,6 @@ private func loadCustomLyricsForTrackId(
     }
     catch let error {
         if let lyricsError = error as? LyricsError {
-            updateLyricsState(for: trackId) { $0.fallbackError = lyricsError }
-
             switch lyricsError {
             case .invalidMusixmatchToken:
                 if !hasShownUnauthorizedPopUp {
@@ -557,36 +629,63 @@ private func loadCustomLyricsForTrackId(
             default:
                 break
             }
-        } else {
-            updateLyricsState(for: trackId) { $0.fallbackError = .unknownError }
         }
 
-        // Attempt Genius fallback if enabled and the primary source isn't already Genius.
-        // Genius requires title + artist to search — only attempt if we have them.
-        let canFallbackToGenius = source != .genius
-            && options.geniusFallback
-            && !(currentTitle ?? "").isEmpty
-            && !(currentArtist ?? "").isEmpty
-        if canFallbackToGenius {
-            writeDebugLog("[Lyrics] Primary source failed for \(trackId); trying Genius fallback")
-            source = .genius
-            do {
-                let candidate = try geniusLyricsRepository.getLyrics(searchQuery, options: options)
-                guard !candidate.lines.isEmpty else {
-                    throw LyricsError.noSuchSong
+        // A text search that finds nothing cannot tell an instrumental track
+        // from one nobody ever wrote down. LRCLIB flags instrumental
+        // explicitly, so ask it before treating the miss as final. The probe
+        // is skipped when "hide on error" is on: that message never reaches
+        // the screen, and the extra round trip would push the answer past the
+        // window in which the card is removed.
+        var instrumental: LyricsDto?
+        if (error as? LyricsError) == .noSuchSong,
+           source != .lrclib,
+           !UserDefaults.lyricsOptions.hideOnError {
+            instrumental = LrclibLyricsRepository.shared.instrumentalLyrics(for: searchQuery)
+        }
+
+        if let instrumental {
+            writeDebugLog("[Lyrics] LRCLIB reports instrumental track=\(trackId)")
+            lyricsDto = instrumental
+        } else {
+            // Recorded only now: while a better answer can still arrive, the
+            // state has to keep saying "no payload yet" rather than "failed",
+            // or the card is removed on the strength of an attempt that is
+            // still running.
+            updateLyricsState(for: trackId) {
+                $0.fallbackError = (error as? LyricsError) ?? .unknownError
+            }
+
+            // Attempt Genius fallback if enabled and the primary source isn't already Genius.
+            // Genius requires title + artist to search — only attempt if we have them.
+            let canFallbackToGenius = source != .genius
+                && options.geniusFallback
+                && !(currentTitle ?? "").isEmpty
+                && !(currentArtist ?? "").isEmpty
+            if canFallbackToGenius {
+                writeDebugLog("[Lyrics] Primary source failed for \(trackId); trying Genius fallback")
+                source = .genius
+                do {
+                    let candidate = try geniusLyricsRepository.getLyrics(searchQuery, options: options)
+                    guard !candidate.lines.isEmpty else {
+                        throw LyricsError.noSuchSong
+                    }
+                    lyricsDto = candidate
+                    writeDebugLog("[Lyrics] Genius fallback loaded \(lyricsDto.lines.count) lines for \(trackId)")
+                } catch {
+                    writeDebugLog("[Lyrics] Genius fallback failed for \(trackId): \(error)")
+                    throw error
                 }
-                lyricsDto = candidate
-                writeDebugLog("[Lyrics] Genius fallback loaded \(lyricsDto.lines.count) lines for \(trackId)")
-            } catch {
-                writeDebugLog("[Lyrics] Genius fallback failed for \(trackId): \(error)")
+            } else {
                 throw error
             }
-        } else {
-            throw error
         }
     }
     
     updateLyricsState(for: trackId) {
+        // Any earlier failure is overruled by this payload — including the
+        // definitive miss that "hide on error" reads to drop the card.
+        $0.fallbackError = nil
         $0.isEmpty = lyricsDto.lines.isEmpty
         $0.wasRomanized = lyricsDto.romanization == .romanized
             || (lyricsDto.romanization == .canBeRomanized && options.romanization)
@@ -765,12 +864,21 @@ private final class LyricsFetchEntry {
         lock.unlock()
         return finished
     }
+
 }
 
 private final class LyricsFetchCoordinator {
     private let lock = NSLock()
     private var entries: [String: LyricsFetchEntry] = [:]
     private var order: [String] = []
+
+    /// True while a lookup for this exact track is still running. Keys are
+    /// "<trackId>|<source>|...", so the prefix match stays track-scoped.
+    func isFetching(trackId: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return order.contains { $0.hasPrefix(trackId + "|") && entries[$0]?.isFinished == false }
+    }
 
     func acquire(key: String) -> (entry: LyricsFetchEntry, shouldStart: Bool) {
         lock.lock()
@@ -936,6 +1044,10 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics
 
     guard let outcome = acquired.entry.wait(timeout: .now() + waitSeconds) else {
         writeDebugLog("[Lyrics] fetch for \(trackIdentifier) exceeded \(waitSeconds)s; returning no lyrics")
+        // Record the miss before serving an empty body: "hide on error" reads
+        // this state to drop the card, and a lookup that has already burned its
+        // whole budget is not going to fill it in for this response.
+        updateLyricsState(for: trackIdentifier) { $0.fallbackError = .noSuchSong }
         throw LyricsError.noSuchSong
     }
 

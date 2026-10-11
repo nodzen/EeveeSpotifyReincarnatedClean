@@ -5,6 +5,21 @@ struct LyricsDto {
     var timeSynced: Bool
     var romanization: LyricsRomanizationStatus
     var translation: LyricsTranslationDto?
+
+    /// What a track LRCLIB explicitly flags as instrumental renders as. Built
+    /// in one place so the LRCLIB repository and the "no lyrics found" path in
+    /// CustomLyrics say exactly the same thing.
+    static var instrumental: LyricsDto {
+        LyricsDto(
+            lines: [
+                LyricsLineDto(content: "song_is_instrumental".localized),
+                LyricsLineDto(content: "let_the_music_play".localized),
+                LyricsLineDto(content: "")
+            ],
+            timeSynced: false,
+            romanization: .original
+        )
+    }
     
     func toSpotifyLyricsData(source: String) -> LyricsData {
         var lyricsData = LyricsData.with {
@@ -21,6 +36,14 @@ struct LyricsDto {
             // Reached when every provider failed or nothing was found. That
             // says nothing about the track being instrumental, so use a
             // neutral unavailable message instead.
+            //
+            // 9.1.x has no ErrorViewController left to hook, so "hide on
+            // error" is served here: an empty payload renders an empty card
+            // instead of the message.
+            if UserDefaults.lyricsOptions.hideOnError {
+                return lyricsData
+            }
+
             lyricsData.lines = [
                 LyricsLine.with {
                     $0.content = "lyrics_not_found".localized

@@ -147,6 +147,18 @@ class LrclibLyricsRepository: LyricsRepository {
         return lines
     }
 
+    /// The instrumental answer for this track, or nil when LRCLIB does not
+    /// know it. Only LRCLIB can separate "instrumental" from "not found", so
+    /// callers that got a plain miss consult this before reporting failure —
+    /// a track LRCLIB never heard of keeps its original error.
+    func instrumentalLyrics(for query: LyricsSearchQuery) -> LyricsDto? {
+        guard let song = try? getSong(trackName: query.title, artistName: query.primaryArtist),
+              song.instrumental else {
+            return nil
+        }
+        return .instrumental
+    }
+
     func getLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {
         let song: LrclibSong
 
@@ -175,15 +187,7 @@ class LrclibLyricsRepository: LyricsRepository {
             // An actual instrumental flag must survive the empty-lines miss
             // check in the provider layer, so emit the message explicitly
             // instead of an empty LyricsDto.
-            return LyricsDto(
-                lines: [
-                    LyricsLineDto(content: "song_is_instrumental".localized),
-                    LyricsLineDto(content: "let_the_music_play".localized),
-                    LyricsLineDto(content: "")
-                ],
-                timeSynced: false,
-                romanization: .original
-            )
+            return .instrumental
         }
 
         if let syncedLyrics = song.syncedLyrics, !syncedLyrics.isEmpty {

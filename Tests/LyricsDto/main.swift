@@ -17,7 +17,7 @@ struct LyricsData: Builder {
     var lines: [LyricsLine] = []
     var translation = LyricsTranslation()
 }
-struct Options { var romanization = false }
+struct Options { var romanization = false; var hideOnError = false }
 extension UserDefaults { static var lyricsOptions = Options() }
 extension String { var localized: String { self } }
 
@@ -38,4 +38,15 @@ precondition(valid.lines.map(\.offsetMs) == [1000, 2000, 3000])
 let plain = convert([3000, 1000], synced: false)
 precondition(plain.lines.map(\.content) == ["line0", "line1"])
 precondition(plain.lines.allSatisfy { $0.offsetMs == 0 })
+// Empty result + hideOnError: no lines at all, instead of the not-found text.
+UserDefaults.lyricsOptions.hideOnError = true
+precondition(convert([], synced: false).lines.isEmpty)
+UserDefaults.lyricsOptions.hideOnError = false
+precondition(!convert([], synced: false).lines.isEmpty)
+// Instrumental is an answer, not a failure: its message renders even when the
+// not-found text is suppressed, so the card can say what the track is.
+UserDefaults.lyricsOptions.hideOnError = true
+precondition(!LyricsDto.instrumental.toSpotifyLyricsData(source: "test").lines.isEmpty)
+precondition(LyricsDto.instrumental.lines.first?.content == "song_is_instrumental")
+UserDefaults.lyricsOptions.hideOnError = false
 print("Lyrics timing conversion tests passed")

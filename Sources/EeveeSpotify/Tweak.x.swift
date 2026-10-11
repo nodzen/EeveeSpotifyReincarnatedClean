@@ -421,6 +421,14 @@ struct EeveeSpotify: Tweak {
 
                 if fullscreenOK {
                     BaseLyricsGroup().activate()
+                    // The patcher only needs to know whether the card must stay
+                    // hidden for a track; waiting for the in-flight provider
+                    // lookup is part of that answer.
+                    ScrollsitaLyricsCardPatcher.installLyricsCardHiddenProvider { trackID in
+                        guard UserDefaults.lyricsOptions.hideOnError else { return false }
+                        awaitLyricsOutcome(trackId: trackID)
+                        return lyricsLookupFailed(trackID)
+                    }
                 } else {
                     writeDebugLog("[INIT] Skipped BaseLyricsGroup (fullscreen VC missing)")
                 }

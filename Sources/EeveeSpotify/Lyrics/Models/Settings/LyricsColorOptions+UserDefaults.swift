@@ -7,7 +7,7 @@ extension UserDefaults {
             displayOriginalColors: true,
             useStaticColor: false,
             staticColor: "",
-            normalizationFactor: 0.5
+            normalizationFactor: 0.35
         )
     )
     static var lyricsColors

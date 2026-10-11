@@ -42,6 +42,25 @@ enum ScrollsitaLyricsCardPatcher {
     /// disappear/appear callbacks.
     private static var lyricsUIRefreshHandler: ((String) -> Bool)?
 
+    /// Answers "should the lyrics card stay hidden for this track?".
+    /// CustomLyrics installs it, so this parser keeps no provider or settings
+    /// state of its own and the standalone macOS regression test keeps
+    /// compiling.
+    private static var lyricsCardHiddenProvider: ((String) -> Bool)?
+
+    static func installLyricsCardHiddenProvider(_ provider: @escaping (String) -> Bool) {
+        contextLock.lock()
+        lyricsCardHiddenProvider = provider
+        contextLock.unlock()
+    }
+
+    private static func lyricsCardShouldBeHidden(_ trackId: String) -> Bool {
+        contextLock.lock()
+        let provider = lyricsCardHiddenProvider
+        contextLock.unlock()
+        return provider?(trackId) ?? false
+    }
+
     /// Playback events exist even when Spotify does not request lyrics or
     /// Scrollsita. Network activity must not overwrite this observed identity.
     @discardableResult
@@ -320,6 +339,20 @@ enum ScrollsitaLyricsCardPatcher {
                 cacheNativeLyricsSection(nativeSection, index: sectionIndex)
                 let shape = sectionFields.map { "\($0.number):\($0.wireType)" }.joined(separator: ",")
 
+                // "Hide on error" means no card at all, not an empty one: drop
+                // the section from the structure instead of rewriting it.
+                if let trackID,
+                   lyricsCardShouldBeHidden(trackID),
+                   let removed = droppingSection(
+                       sectionField,
+                       bytes: bytes,
+                       structureField: structureField,
+                       structureStart: structureStart
+                   ) {
+                    writeDebugLog("[ScrollsitaLyrics] removed lyrics card: no lyrics found and hideOnError is on index=\(sectionIndex) track=\(trackID) \(data.count)->\(removed.count) path=\(url.path)")
+                    return removed
+                }
+
                 guard let trackURI = currentTrackURI,
                       let sectionURI = currentSectionURI else {
                     writeDebugLog("[ScrollsitaLyrics] native section kept: current track ID unavailable index=\(sectionIndex) path=\(url.path)")
@@ -370,6 +403,13 @@ enum ScrollsitaLyricsCardPatcher {
         // payloads (recommendations and queue sections contain other tracks).
         guard let trackID = trackID else {
             writeDebugLog("[ScrollsitaLyrics] skipped injection: current track ID unavailable path=\(url.path)")
+            return nil
+        }
+
+        // Nothing to render and the user asked for the card to stay hidden:
+        // do not create the lower card in the first place.
+        if lyricsCardShouldBeHidden(trackID) {
+            writeDebugLog("[ScrollsitaLyrics] skipped lyrics card: no lyrics found and hideOnError is on track=\(trackID) path=\(url.path)")
             return nil
         }
 
@@ -431,6 +471,33 @@ enum ScrollsitaLyricsCardPatcher {
         result.append(contentsOf: bytes[structureField.fieldEnd...])
 
         writeDebugLog("[ScrollsitaLyrics] injected lower lyrics card schema=lyrics#5/info#23 uniqueSection=true track=\(trackID) index=\(preferredIndex) template=\(template != nil) \(data.count)->\(result.count)")
+        return Data(result)
+    }
+
+    /// Rebuilds the response without one section, fixing the outer structure
+    /// length. Every other byte — including fields after the structure — is
+    /// kept, so only the removed card disappears.
+    private static func droppingSection(
+        _ sectionField: WireField,
+        bytes: [UInt8],
+        structureField: WireField,
+        structureStart: Int
+    ) -> Data? {
+        guard let lengthStart = structureField.lengthStart,
+              let structureEnd = structureField.payloadEnd else { return nil }
+
+        var newStructure = Array(bytes[structureStart..<structureEnd])
+        let relativeStart = sectionField.fieldStart - structureStart
+        let relativeEnd = sectionField.fieldEnd - structureStart
+        guard relativeStart >= 0,
+              relativeEnd <= newStructure.count,
+              relativeStart < relativeEnd else { return nil }
+        newStructure.removeSubrange(relativeStart..<relativeEnd)
+
+        var result = Array(bytes[..<lengthStart])
+        result.append(contentsOf: encodeVarint(UInt64(newStructure.count)))
+        result.append(contentsOf: newStructure)
+        result.append(contentsOf: bytes[structureEnd...])
         return Data(result)
     }
 

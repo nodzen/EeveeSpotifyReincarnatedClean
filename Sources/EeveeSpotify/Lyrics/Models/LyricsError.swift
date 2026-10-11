@@ -1,6 +1,6 @@
 import Foundation
 
-enum LyricsError: Error, CustomStringConvertible {
+enum LyricsError: Error, CustomStringConvertible, Equatable {
     case noCurrentTrack
     case trackMismatch
     case musixmatchRestricted
