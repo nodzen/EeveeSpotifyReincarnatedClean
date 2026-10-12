@@ -4,7 +4,7 @@
 
 **Maintainer:** [Nodzen](https://github.com/nodzen) <br />
 **Based on:** [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) <br />
-**Release:** `6.7.3` **Spotify:** `9.1.x` (tested on `9.1.80`)
+**Release:** `6.7.3` **Spotify:** `9.1.x` (tested on `9.1.90`)
 
 This is an independent clean fork with its own direction. Stability and no-bloat
 come first; scope decisions are the maintainer's. Useful changes are ported
