@@ -4,7 +4,6 @@ extension UserDefaults {
     static var container: UserDefaults = .standard
     
     private static let musixmatchTokenKey = "musixmatchToken"
-    private static let darkPopUpsKey = "darkPopUps"
     private static let amoledThemeKey = "amoledTheme"
     private static let patchTypeKey = "patchType"
     private static let trueShuffleEnabledKey = "trueShuffleEnabled"
@@ -26,15 +25,6 @@ extension UserDefaults {
         }
         set (token) {
             container.set(token, forKey: musixmatchTokenKey)
-        }
-    }
-
-    static var darkPopUps: Bool {
-        get {
-            container.object(forKey: darkPopUpsKey) as? Bool ?? true
-        }
-        set (darkPopUps) {
-            container.set(darkPopUps, forKey: darkPopUpsKey)
         }
     }
 

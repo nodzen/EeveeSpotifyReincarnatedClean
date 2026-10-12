@@ -48,18 +48,6 @@ struct EeveeUISettingsView: View {
                 }
             }
             
-            if !EeveeSpotify.isSpotify91OrNewer {
-                Section {
-                    Toggle(
-                        "dark_popups".localized,
-                        isOn: Binding<Bool>(
-                            get: { UserDefaults.darkPopUps },
-                            set: { UserDefaults.darkPopUps = $0 }
-                        )
-                    )
-                }
-            }
-
             if EeveeSpotify.isSpotify91OrNewer {
                 Section(
                     footer: Text("hide_lyrics_under_cover_art_description".localized)
