@@ -110,7 +110,11 @@ class UpsellBannerViewHook: ClassHook<UIView> {
         target.isUserInteractionEnabled = false
         if target.superview != nil {
             cmpLog("suppressed SelfLoadingUpsellBannerUIView")
-            target.removeFromSuperview()
+            // Never rip the view out synchronously: at cold start this fires
+            // mid-layout and mutates the hierarchy UIKit is installing.
+            // Hide now, remove on the next runloop pass.
+            let view: UIView = target
+            DispatchQueue.main.async { view.removeFromSuperview() }
         }
     }
 }
@@ -125,7 +129,9 @@ class PremiumUpsellBannerViewHook: ClassHook<UIView> {
         target.isUserInteractionEnabled = false
         if target.superview != nil {
             cmpLog("suppressed PremiumUpsellHeaderCentralView")
-            target.removeFromSuperview()
+            // Same as above: deferred removal, never mid-layout.
+            let view: UIView = target
+            DispatchQueue.main.async { view.removeFromSuperview() }
         }
     }
 }
@@ -141,12 +147,24 @@ class PremiumUpsellControlPanelHook: ClassHook<UIView> {
         target.isUserInteractionEnabled = false
         if target.superview != nil {
             cmpLog("suppressed PremiumUpsellControlPanel")
-            target.removeFromSuperview()
+            let view: UIView = target
+            DispatchQueue.main.async { view.removeFromSuperview() }
         }
     }
 }
 
 func activateClientMessagingPlatformBlocker() {
+    // Orion fatals on double activation (Group.swift:166, "has already been
+    // activated"). All element hooks below share UpsellElementViewGroup, and
+    // on builds where several targets resolve the loop would activate it
+    // several times — so activate once (same isActive pattern as
+    // ModernPromotionBlockers).
+    func activateUpsellElementViewGroupOnce() {
+        if !UpsellElementViewGroup.isActive {
+            UpsellElementViewGroup().activate()
+        }
+    }
+
     let viewWillAppearSelector = Selector(("viewWillAppear:"))
     let didMoveToSuperviewSelector = Selector(("didMoveToSuperview"))
 
@@ -158,9 +176,9 @@ func activateClientMessagingPlatformBlocker() {
 
     let viewHooks: [(String, String, () -> Void)] = [
         (CMPBannerViewHook.targetName, "CMPBannerView", { CMPBannerViewGroup().activate() }),
-        (UpsellBannerViewHook.targetName, "SelfLoadingUpsellBannerUIView", { UpsellElementViewGroup().activate() }),
-        (PremiumUpsellBannerViewHook.targetName, "PremiumUpsellHeaderCentralView", { UpsellElementViewGroup().activate() }),
-        (PremiumUpsellControlPanelHook.targetName, "PremiumUpsellControlPanel", { UpsellElementViewGroup().activate() }),
+        (UpsellBannerViewHook.targetName, "SelfLoadingUpsellBannerUIView", { activateUpsellElementViewGroupOnce() }),
+        (PremiumUpsellBannerViewHook.targetName, "PremiumUpsellHeaderCentralView", { activateUpsellElementViewGroupOnce() }),
+        (PremiumUpsellControlPanelHook.targetName, "PremiumUpsellControlPanel", { activateUpsellElementViewGroupOnce() }),
     ]
 
     var activated = 0
