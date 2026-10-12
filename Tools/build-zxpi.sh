@@ -36,14 +36,11 @@ else
     exit 1
 fi
 
-mkdir -p "$REPO_DIR/extra_dylibs"
 mkdir -p "$REPO_DIR/packages"
 
-cp "$DYLIB_OUT" "$REPO_DIR/extra_dylibs/zxPluginsInject.dylib"
 cp "$DYLIB_OUT" "$REPO_DIR/packages/zxPluginsInject.dylib"
 
-install_name_tool -id "@rpath/zxPluginsInject.dylib" "$REPO_DIR/extra_dylibs/zxPluginsInject.dylib" 2>/dev/null || true
 install_name_tool -id "@rpath/zxPluginsInject.dylib" "$REPO_DIR/packages/zxPluginsInject.dylib" 2>/dev/null || true
 
-echo "Saved and verified in packages/ and extra_dylibs/"
+echo "Saved and verified in packages/"
 ls -lh "$REPO_DIR/packages/zxPluginsInject.dylib"

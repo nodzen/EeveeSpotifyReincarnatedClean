@@ -195,6 +195,8 @@ iconSelected = "Selected";
 iconTapToApply = "Tap to apply";
 prettifyIconNames = "Prettify Icon Names";
 prettifyIconNamesDescription = "Converts underscores, hyphens, and camelCase into spaces";
+exportAppIcon = "Export Current Icon";
+exportAppIconFailed = "Could not export the current icon.";
 
 // SponsorBlock
 categoryOneFooter = "Skips community-marked segments in podcast episodes.";

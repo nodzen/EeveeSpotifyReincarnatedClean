@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Local IPA build — mirror of .github/workflows/main.yml. Produces an IPA
+# Local IPA build — mirror of the IPA steps in .github/workflows/buildpatched.yml. Produces an IPA
 # you can sign with Sideloadly/AltStore/TrollStore.
 #
 # Pipeline:
@@ -47,7 +47,7 @@ Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh
 
 color "2/7  theos make package (debug=${EEVEE_DEBUG:-0})"
 THEOS_PACKAGE_SCHEME=rootless make package FINALPACKAGE=1 EEVEE_DEBUG="${EEVEE_DEBUG:-0}"
-DEB_FILE=$(ls -t packages/com.eevee.spotify_*.deb 2>/dev/null | head -1)
+DEB_FILE=$(ls -t packages/com.eevee.spotify_*_iphoneos-arm64.deb 2>/dev/null | head -1)
 [ -n "$DEB_FILE" ] || { echo "deb not produced"; exit 1; }
 
 color "3/7  zxPluginsInject.dylib"
@@ -73,28 +73,10 @@ cyan -i "$VANILLA_IPA" -o "$OUT_IPA" -f "${INJECT[@]}" -c 9 -m 15.0 -du
 color "6/7  ipapatch LC-inject zxPluginsInject"
 ipapatch --input "$OUT_IPA" --inplace --noconfirm --dylib packages/zxPluginsInject.dylib
 
-# Belt-and-suspenders: cyan -du normally strips Watch content, but recent
-# Spotify IPAs use com.apple.WatchPlaceholder instead of Watch. Work in /tmp:
-# Finder can recreate metadata inside Outputs/IPAS/Payload while `rm -rf` is
-# walking it, which used to abort the build after an otherwise valid IPA was
-# produced.
-WATCH_TMP="$(mktemp -d "${TMPDIR:-/tmp}/eevee-watch.XXXXXX")"
-unzip -q "$OUT_IPA" -d "$WATCH_TMP"
-STRIPPED_WATCH=0
-for WATCH_PATH in \
-    "$WATCH_TMP/Payload/Spotify.app/Watch" \
-    "$WATCH_TMP/Payload/Spotify.app/com.apple.WatchPlaceholder"; do
-    if [ -e "$WATCH_PATH" ]; then
-        rm -rf "$WATCH_PATH"
-        STRIPPED_WATCH=1
-    fi
-done
-if [ "$STRIPPED_WATCH" -eq 1 ]; then
-    REBUILT_IPA="$WATCH_TMP/rebuilt.ipa"
-    (cd "$WATCH_TMP" && zip -qry "$REBUILT_IPA" Payload)
-    mv -f "$REBUILT_IPA" "$OUT_IPA"
-fi
-rm -rf "$WATCH_TMP"
+# Same strip as CI (Tools/strip-ipa.sh): Watch + native appex must go or
+# sideload resigners choke on their entitlements.
+chmod +x Tools/strip-ipa.sh
+Tools/strip-ipa.sh "$OUT_IPA"
 
 color "7/7  alternate app icons"
 chmod +x Tools/alt-icons.sh

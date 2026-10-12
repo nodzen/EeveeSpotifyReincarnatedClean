@@ -49,7 +49,7 @@ enum SponsorBlockReporter {
         let chars = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         var out = ""
         out.reserveCapacity(36)
-        for _ in 0..<36 { out.append(chars.randomElement()!) }
+        for _ in 0..<36 { out.append(chars.randomElement() ?? "x") }
         return out
     }
 
@@ -97,7 +97,9 @@ enum SponsorBlockReporter {
         req.setValue("EeveeSpotify-SponsorBlock/1", forHTTPHeaderField: "X-CLIENT-NAME")
 
         let payloadStr = String(data: payload, encoding: .utf8) ?? "<binary>"
-        NSLog("[EeveeSpotify][SB][SUBMIT] POST %@ payload=%@", url.absoluteString, payloadStr)
+        if EeveeDebug.enabled {
+            NSLog("[EeveeSpotify][SB][SUBMIT] POST %@ payload=%@", url.absoluteString, payloadStr)
+        }
         writeDebugLog("[SB][submit] POST \(url.absoluteString) payload=\(payloadStr)")
         session.dataTask(with: req) { data, resp, err in
             if let err { completion(.failure(.transport(err))); return }
@@ -105,7 +107,9 @@ enum SponsorBlockReporter {
                 completion(.failure(.http(0, nil))); return
             }
             let bodyStr = data.flatMap { String(data: $0, encoding: .utf8) }
-            NSLog("[EeveeSpotify][SB][SUBMIT] <- %d body=%@", http.statusCode, bodyStr ?? "<nil>")
+            if EeveeDebug.enabled {
+                NSLog("[EeveeSpotify][SB][SUBMIT] <- %d body=%@", http.statusCode, bodyStr ?? "<nil>")
+            }
             writeDebugLog("[SB][submit] -> \(http.statusCode) body=\(bodyStr ?? "<nil>")")
             if (200..<300).contains(http.statusCode) {
                 completion(.success(()))

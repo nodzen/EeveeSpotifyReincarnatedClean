@@ -32,8 +32,9 @@ color() { printf '\033[1;32m==> %s\033[0m\n' "$*"; }
 
 # swift-protobuf is a pinned third-party dependency: an existing framework is
 # only stale if SWIFTPROTOBUF_VERSION changes, and rebuilding it costs minutes.
-if [ -f "$OUT/$MODULE" ] && [ -d "$OUT/Modules" ]; then
-    color "$MODULE.framework already built; skipping"
+# The stamp records which version the existing framework was built from.
+if [ -f "$OUT/$MODULE" ] && [ -d "$OUT/Modules" ] && [ "$(cat "$OUT/.eevee-protobuf-version" 2>/dev/null)" = "$VERSION" ]; then
+    color "$MODULE.framework already built ($VERSION); skipping"
     exit 0
 fi
 
@@ -113,4 +114,5 @@ cat > "$OUT/Info.plist" <<EOF
 EOF
 
 color "Done"
+echo "$VERSION" > "$OUT/.eevee-protobuf-version"
 file "$OUT/${MODULE}"

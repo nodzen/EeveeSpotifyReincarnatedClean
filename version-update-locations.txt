@@ -1,7 +1,7 @@
 EeveeSpotify Version Update Locations
 =====================================
 
-When bumping the version, update these 3 files:
+When bumping the version, update these 4 files:
 
 1. control
    - Line 3: Version: X.X.X
@@ -14,6 +14,9 @@ When bumping the version, update these 3 files:
 3. README.md
    - Update the `Release:` badge in the header
    - Example: **Release:** `6.4.5`
+
+4. .github/workflows/builddeb.yml
+   - Update the `tag` input `default` (e.g. "v6.7.3")
 
 `build-ipa-local.sh` reads the IPA version automatically from `control`; no separate edit is needed.
 

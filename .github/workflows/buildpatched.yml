@@ -39,7 +39,7 @@ jobs:
 
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '26.1.1'
+          xcode-version: '26.3.0'
 
       - name: Setup Theos
         uses: actions/checkout@v4
@@ -149,6 +149,12 @@ jobs:
           ipapatch --input "$OUT_IPA" --inplace --noconfirm \
                    --dylib packages/zxPluginsInject.dylib
 
+      - name: Strip Watch + native appex
+        if: ${{ inputs.ipa_url != '' }}
+        run: |
+          chmod +x Tools/strip-ipa.sh
+          Tools/strip-ipa.sh "$OUT_IPA"
+
       - name: Inject OpeninSafariSpotify extension into IPA PlugIns
         if: ${{ inputs.ipa_url != '' }}
         run: |
@@ -161,22 +167,6 @@ jobs:
           cp -R "$OPENSPOTIFY_APPEX" "Payload/Spotify.app/PlugIns/OpenSpotifySafariExtension.appex"
 
           # Repack only the Payload folder back into the IPA
-          zip -qry "$(basename "$OUT_IPA")" Payload
-          rm -rf Payload
-
-      - name: Strip Watch app (if any survived)
-        if: ${{ inputs.ipa_url != '' }}
-        run: |
-          cd "$(dirname "$OUT_IPA")"
-          rm -rf Payload
-          unzip -q "$(basename "$OUT_IPA")"
-          if [ -d "Payload/Spotify.app/com.apple.WatchPlaceholder" ]; then
-            rm -rf Payload/Spotify.app/com.apple.WatchPlaceholder
-          fi
-          if [ -d "Payload/Spotify.app/Watch" ]; then
-            rm -rf Payload/Spotify.app/Watch
-          fi
-          rm -f "$(basename "$OUT_IPA")"
           zip -qry "$(basename "$OUT_IPA")" Payload
           rm -rf Payload
 

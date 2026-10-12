@@ -1,35 +1,40 @@
 import Foundation
 
 class OfflineHelper {
-    static private let applicationSupportDirectory = FileManager.default.urls(
+    static private let applicationSupportDirectory: URL? = FileManager.default.urls(
         for: .applicationSupportDirectory, in: .userDomainMask
     )
-    .first!
+    .first
     
-    static private let cachesDirectory = FileManager.default.urls(
+    static private let cachesDirectory: URL? = FileManager.default.urls(
         for: .cachesDirectory, in: .userDomainMask
-    ).first!
+    ).first
     
     //
     
-    static private let persistentCachePath = applicationSupportDirectory
-        .appendingPathComponent("PersistentCache")
+    static private var persistentCachePath: URL? {
+        applicationSupportDirectory?.appendingPathComponent("PersistentCache")
+    }
     
-    static private let remoteConfigPath = applicationSupportDirectory
-        .appendingPathComponent("remote-config")
+    static private var remoteConfigPath: URL? {
+        applicationSupportDirectory?.appendingPathComponent("remote-config")
+    }
     
     //
     
     static private func resetPersistentCache() throws {
-        try FileManager.default.removeItem(at: self.persistentCachePath)
+        guard let path = persistentCachePath else { return }
+        try FileManager.default.removeItem(at: path)
     }
     
     static private func resetRemoteConfig() throws {
-        try FileManager.default.removeItem(at: self.remoteConfigPath)
+        guard let path = remoteConfigPath else { return }
+        try FileManager.default.removeItem(at: path)
     }
     
     static private func resetCaches() throws {
-        try FileManager.default.removeItem(at: self.cachesDirectory)
+        guard let path = cachesDirectory else { return }
+        try FileManager.default.removeItem(at: path)
     }
     
     //

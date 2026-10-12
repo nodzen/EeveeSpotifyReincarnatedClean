@@ -30,7 +30,10 @@ extension EeveeLyricsSettingsView {
         }
 
         alert.addAction(UIAlertAction(title: "OK".uiKitLocalized, style: .default) { _ in
-            let text = alert.textFields!.first!.text!
+            guard let text = alert.textFields?.first?.text else {
+                viewModel.lyricsSource = oldSource
+                return
+            }
             
             guard let token =
                 viewModel.getMusixmatchTokenFromDebugInfo(text)

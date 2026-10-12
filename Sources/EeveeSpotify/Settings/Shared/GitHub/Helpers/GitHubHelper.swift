@@ -11,7 +11,9 @@ struct GitHubHelper {
     }
     
     private func perform(_ path: String) async throws -> Data {
-        let url = URL(string: "\(apiUrl)\(path)")!
+        guard let url = URL(string: "\(apiUrl)\(path)") else {
+            throw URLError(.badURL)
+        }
         let (data, _) = try await URLSession.shared.data(from: url)
         
         return data
@@ -33,11 +35,12 @@ struct GitHubHelper {
     }
     
     func getEeveeContributorSections() async throws -> [EeveeContributorSection] {
-        let (data, _) = try await URLSession.shared.data(
-            from: URL(
-                string: "https://raw.githubusercontent.com/\(EeveeSpotify.repoSlug)/refs/heads/\(GeneratedConfig.branchName)/contributors.json"
-            )!
-        )
+        guard let url = URL(
+            string: "https://raw.githubusercontent.com/\(EeveeSpotify.repoSlug)/refs/heads/\(GeneratedConfig.branchName)/contributors.json"
+        ) else {
+            throw URLError(.badURL)
+        }
+        let (data, _) = try await URLSession.shared.data(from: url)
         return try decoder.decode([EeveeContributorSection].self, from: data)
     }
 }

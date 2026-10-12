@@ -11,8 +11,11 @@ class UIApplicationLiveContainerSharingHook: ClassHook<UIApplication> {
         if UserDefaults.experimentsOptions.liveContainerSharing, !target.canOpenURL(url) {
             UIPasteboard.general.addItems([[UTType.url.identifier: url]])
             
-            let data = url.dataRepresentation
-            let liveContainerUrl = URL(string: "livecontainer://open-url?url=\(data.base64EncodedString())")!
+            let base64 = url.dataRepresentation.base64EncodedString()
+                .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            guard let liveContainerUrl = URL(string: "livecontainer://open-url?url=\(base64)") else {
+                return
+            }
             
             orig.openURL(
                 liveContainerUrl,

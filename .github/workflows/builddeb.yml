@@ -6,7 +6,7 @@ on:
       tag:
         description: "Git tag to create/use for the draft release (e.g. v6.6.9)"
         required: true
-        default: "v6.6.9"
+        default: "v6.7.3"
       release_name:
         description: "Release title (optional)"
         required: false
@@ -69,11 +69,6 @@ jobs:
       - name: Test ad and Premium banner filtering
         run: |
           swiftc \
-            Sources/EeveeSpotify/ListeningActivityPrivacyPolicy.swift \
-            Tests/ListeningActivityPrivacy/main.swift \
-            -o "$RUNNER_TEMP/listening-activity-privacy-tests"
-          "$RUNNER_TEMP/listening-activity-privacy-tests"
-          swiftc \
             Sources/EeveeSpotify/Premium/Helpers/BrowsitaSectionStripper.swift \
             Tests/BrowsitaSectionStripper/main.swift \
             -o "$RUNNER_TEMP/browsita-section-stripper-tests"
@@ -98,6 +93,24 @@ jobs:
             Tests/SyntheticLyricsTaskTracker/main.swift \
             -o "$RUNNER_TEMP/synthetic-lyrics-task-tracker-tests"
           "$RUNNER_TEMP/synthetic-lyrics-task-tracker-tests"
+          swiftc \
+            Sources/EeveeSpotify/Lyrics/ScrollsitaLyricsCardPatcher.swift \
+            Tests/ScrollsitaLyricsCardPatcher/main.swift \
+            -o "$RUNNER_TEMP/scrollsita-lyrics-card-patcher-tests"
+          "$RUNNER_TEMP/scrollsita-lyrics-card-patcher-tests"
+          swiftc \
+            Sources/EeveeSpotify/Shared/Helpers/LyricsResponseGate.swift \
+            Tests/LyricsResponseGate/main.swift \
+            -o "$RUNNER_TEMP/lyrics-response-gate-tests"
+          "$RUNNER_TEMP/lyrics-response-gate-tests"
+          swiftc \
+            Sources/EeveeSpotify/Lyrics/Models/LyricsDto.swift \
+            Sources/EeveeSpotify/Lyrics/Models/LyricsLineDto.swift \
+            Sources/EeveeSpotify/Lyrics/Models/LyricsTranslationDto.swift \
+            Sources/EeveeSpotify/Lyrics/Models/LyricsRomanizationStatus.swift \
+            Tests/LyricsDto/main.swift \
+            -o "$RUNNER_TEMP/lyrics-dto-tests"
+          "$RUNNER_TEMP/lyrics-dto-tests"
           python3 Tests/ResolveConfigurationSnapshot/test.py
 
       - name: Build ${{ matrix.label }} .deb

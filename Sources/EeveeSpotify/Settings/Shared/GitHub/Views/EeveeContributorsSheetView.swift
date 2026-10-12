@@ -4,7 +4,9 @@ struct ContributorRow: View {
     let contributor: EeveeContributor
 
     var body: some View {
-        if contributor.usernames.count > 1 {
+        if contributor.usernames.isEmpty {
+            EmptyView()
+        } else if contributor.usernames.count > 1 {
             // Multiple main contributors: inline [pfp] name & [pfp] name
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
@@ -188,7 +190,6 @@ struct EeveeContributorsSheetView: View {
             do {
                 sections = try await GitHubHelper.shared.getEeveeContributorSections()
             } catch {
-                print("Failed to load contributors: \(error)")
                 errorMessage = error.localizedDescription
             }
             isLoading = false

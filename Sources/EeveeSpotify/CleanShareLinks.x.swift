@@ -288,7 +288,7 @@ enum PasteboardConcreteSwizzler {
         guard !installed else { return }
         installed = true
 
-        let concrete: AnyClass = object_getClass(UIPasteboard.general)!
+        guard let concrete: AnyClass = object_getClass(UIPasteboard.general) else { return }
         let base: AnyClass = UIPasteboard.self
 
         // The `as AnyObject` casts bridge Swift value types to the ObjC `id` the

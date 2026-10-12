@@ -5,8 +5,9 @@ struct AnonymousTokenHelper {
     private static let apiUrl = "https://apic-appmobile.musixmatch.com"
 
     private static func fetchToken(appId: String) throws -> String {
-        let urlString = "\(apiUrl)/ws/1.1/token.get?app_id=\(appId)"
-        let url = URL(string: urlString)!
+        let encodedAppId = appId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? appId
+        let urlString = "\(apiUrl)/ws/1.1/token.get?app_id=\(encodedAppId)"
+        guard let url = URL(string: urlString) else { throw AnonymousTokenError.invalidResponse }
 
         let semaphore = DispatchSemaphore(value: 0)
         var responseData: Data?

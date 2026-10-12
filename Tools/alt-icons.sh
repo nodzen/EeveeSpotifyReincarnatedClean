@@ -46,7 +46,13 @@ patch_app() {
     local names; names="$(icon_names)"
     [ -n "$names" ] || { echo "[alt-icons] nothing to register"; return 0; }
 
-    cp -f "$ICON_DIR"/*.png "$app/"
+    # Copy only the variants iOS actually resolves (icon_names); the rest
+    # of Assets/AppIcon would just bloat every IPA.
+    while IFS= read -r n; do
+        for v in "${n}@2x.png" "${n}@3x.png" "${n}@2x~ipad.png" "${n}~ipad.png"; do
+            [ -f "$ICON_DIR/$v" ] && cp -f "$ICON_DIR/$v" "$app/"
+        done
+    done <<<"$names"
 
     register() {
         local base="$1"

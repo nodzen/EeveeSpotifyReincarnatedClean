@@ -47,7 +47,8 @@ class MusixmatchLyricsRepository: LyricsRepository {
         let queryString = finalQuery.queryString
         stringUrl += "?\(queryString)"
 
-        let request = URLRequest(url: URL(string: stringUrl)!)
+        guard let url = URL(string: stringUrl) else { throw LyricsError.decodingError }
+        let request = URLRequest(url: url)
 
         let semaphore = DispatchSemaphore(value: 0)
         var data: Data?

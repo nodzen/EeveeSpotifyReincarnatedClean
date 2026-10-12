@@ -38,7 +38,8 @@ class GeniusLyricsRepository: LyricsRepository {
             stringUrl += "?\(queryString)"
         }
         
-        let request = URLRequest(url: URL(string: stringUrl)!)
+        guard let url = URL(string: stringUrl) else { throw LyricsError.decodingError }
+        let request = URLRequest(url: url)
 
         let semaphore = DispatchSemaphore(value: 0)
         var data: Data?
@@ -95,7 +96,7 @@ class GeniusLyricsRepository: LyricsRepository {
         primaryArtist: String,
         romanized: Bool,
         hasFoundRomanizedLyrics: inout Bool
-    ) -> GeniusHitResult {
+    ) -> GeniusHitResult? {
         let results = hits.map { $0.result }
 
         // Genius search also returns localized/translated pages. They often
@@ -166,7 +167,7 @@ class GeniusLyricsRepository: LyricsRepository {
             return romanizedSong
         }
 
-        let selected = pool.first!
+        guard let selected = pool.first else { return nil }
         writeDebugLog("[Genius] selected id=\(selected.id) title=\(selected.title) artist=\(selected.artistNames) romanized=\(romanized)")
         return selected
     }
@@ -196,13 +197,15 @@ class GeniusLyricsRepository: LyricsRepository {
         
         var hasFoundRomanizedLyrics = false
         
-        let song = mostRelevantHitResult(
+        guard let song = mostRelevantHitResult(
             hits: hits,
             strippedTitle: strippedTitle,
             primaryArtist: query.primaryArtist,
             romanized: options.romanization,
             hasFoundRomanizedLyrics: &hasFoundRomanizedLyrics
-        )
+        ) else {
+            throw LyricsError.noSuchSong
+        }
         
         let songInfo = try getSongInfo(song.id)
         let plainLines = songInfo.lyrics.plain.components(separatedBy: "\n")

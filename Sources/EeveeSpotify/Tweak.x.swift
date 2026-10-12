@@ -222,7 +222,9 @@ struct EeveeSpotify: Tweak {
     static var hookTarget: VersionHookTarget {
         let version = spotifyVersion
         
-        NSLog("[EeveeSpotify] Detected Spotify version: \(version)")
+        if EeveeDebug.enabled {
+            NSLog("[EeveeSpotify] Detected Spotify version: \(version)")
+        }
         
         // Version -> target mapping. Exact pins are the last builds for
         // dropped iOS versions; the 9.1 family is matched by prefix;
@@ -232,7 +234,7 @@ struct EeveeSpotify: Tweak {
             return .lastAvailableiOS15
         case "8.9.8":
             return .lastAvailableiOS14
-        case _ where version.contains("9.1"):
+        case _ where version.hasPrefix("9.1."):
             // 9.1.x versions don't have offline content helper classes
             return .v91
         default:
@@ -333,8 +335,6 @@ struct EeveeSpotify: Tweak {
         } else {
             NSLog("[EeveeSpotify] Skipped AdBlockerGroup (HUB builder API unavailable)")
         }
-
-        // activateEeveeFlexGesture()
 
         // Clean Share Links: swizzle the concrete class of UIPasteboard.general in
         // addition to the ClassHook<UIPasteboard> hooks — the general pasteboard is a

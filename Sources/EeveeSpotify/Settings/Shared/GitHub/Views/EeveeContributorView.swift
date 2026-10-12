@@ -5,6 +5,9 @@ struct EeveeContributorView: View {
     var githubUser: GitHubUser
 
     var body: some View {
+        if contributor.usernames.isEmpty {
+            EmptyView()
+        } else {
         VStack {
             Link(destination: URL(string: githubUser.htmlUrl)!) {
                 HStack(spacing: 10) {
@@ -48,6 +51,7 @@ struct EeveeContributorView: View {
                     ChevronRightView()
                 }
             }
+        }
         }
     }
 

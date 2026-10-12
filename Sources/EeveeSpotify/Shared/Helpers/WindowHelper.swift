@@ -7,8 +7,8 @@ struct WindowHelper {
     let rootViewController: UIViewController
     
     private init() { 
-        self.window = UIApplication.shared.windows.first!
-        self.rootViewController = window.rootViewController!
+        self.window = UIApplication.shared.windows.first ?? UIWindow()
+        self.rootViewController = window.rootViewController ?? UIViewController()
     }
 
     func present(_ viewController: UIViewController) {
@@ -29,7 +29,7 @@ struct WindowHelper {
     }
 
     func findFirstViewController(_ regex: String) -> UIViewController? {
-        let rootView = self.rootViewController.view!
+        guard let rootView = self.rootViewController.view else { return nil }
         var result: UIViewController?
         
         func searchViews(_ view: UIView) {

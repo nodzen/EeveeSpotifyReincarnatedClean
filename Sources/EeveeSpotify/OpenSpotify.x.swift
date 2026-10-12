@@ -6,7 +6,8 @@ class UIOpenURLContextHook: ClassHook<UIOpenURLContext> {
         let url = orig.URL()
 
         if url.isOpenSpotifySafariExtension {
-            return Foundation.URL(string: "https:/\(url.path)")!
+            guard let fixed = Foundation.URL(string: "https:/\(url.path)") else { return url }
+            return fixed
         }
 
         return url

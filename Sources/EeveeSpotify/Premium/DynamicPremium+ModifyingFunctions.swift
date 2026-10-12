@@ -455,7 +455,7 @@ private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
             .compactMap { name in attributes[name].map { (name, $0) } }
     )
 
-    let oneYearFromNow = Calendar.current.date(byAdding: .year, value: 1, to: Date())!
+    let oneYearFromNow = Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
     
     let formatter = ISO8601DateFormatter()
     formatter.timeZone = TimeZone(abbreviation: "UTC")

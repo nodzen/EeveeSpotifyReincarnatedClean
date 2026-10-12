@@ -46,6 +46,13 @@ struct EeveeAppIconPickerView: View {
                             .foregroundColor(.secondary)
                     }
                 }
+
+                Button { exportSelected() } label: {
+                    HStack {
+                        Image(systemName: "square.and.arrow.up")
+                        Text("exportAppIcon".localized)
+                    }
+                }
             }
 
             SpacerView()
@@ -177,6 +184,37 @@ struct EeveeAppIconPickerView: View {
                 UserDefaults.standard.set(previous, forKey: selectedKeyDefault)
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+
+    /// Shares the currently selected icon as a PNG so it can be saved to
+    /// Files/Photos and assigned to a Home Screen Shortcut. Container hosts
+    /// read a guest's primary icon on copy and ignore the alternate, so
+    /// export sidesteps the host instead of fighting it.
+    private func exportSelected() {
+        guard let icon = icons.first(where: { $0.id == selectedKey }),
+              let image = Self.image(for: icon),
+              let data = image.pngData() else {
+            errorMessage = "exportAppIconFailed".localized
+            return
+        }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(icon.id).png")
+        do {
+            try data.write(to: url, options: .atomic)
+        } catch {
+            errorMessage = "exportAppIconFailed".localized
+            return
+        }
+        let activityVC = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootVC = scene.windows.first?.rootViewController {
+            var topVC = rootVC
+            while let presented = topVC.presentedViewController { topVC = presented }
+            if let popover = activityVC.popoverPresentationController {
+                popover.sourceView = topVC.view
+                popover.sourceRect = CGRect(x: topVC.view.bounds.midX, y: topVC.view.bounds.midY, width: 0, height: 0)
+            }
+            topVC.present(activityVC, animated: true)
         }
     }
 
