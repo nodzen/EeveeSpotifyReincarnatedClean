@@ -3,45 +3,81 @@
 # EeveeSpotifyReincarnatedClean
 
 **Maintainer:** [Nodzen](https://github.com/nodzen) <br />
-**Project Developer:** [jaydenjcpy](https://github.com/jaydenjcpy) <br />
 **Based on:** [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) <br />
-**Release:** `6.7.2` **Last Update:** `9/18/26` **Spotify Version:** `9.1.80`
+**Release:** `6.7.3` **Spotify:** `9.1.x` (tested on `9.1.80`)
 
-This is an independent clean fork maintained by [Nodzen](https://github.com/nodzen). It keeps the original project and community contributions while excluding unrelated prank and donation additions.
+This is an independent clean fork with its own direction. Stability and no-bloat
+come first; scope decisions are the maintainer's. Useful changes are ported
+selectively in both directions — this fork is not synced commit-for-commit with
+upstream, and upstream is welcome to port back from here the same way.
+
+It keeps the original project and community contributions while excluding
+unrelated prank and donation additions.
 
 > [!IMPORTANT]
-> This fork has diverged substantially from the original repository. It is not synchronized commit-for-commit: I selectively port useful upstream changes, and upstream developers are welcome to port useful changes from this fork in the same way.
+> This fork has diverged substantially from the original repository.
 
-## Lyrics Status
-
-Custom lyrics on Spotify `9.1.80` are usable — not perfect, but this is already a win.
-
-- **Genius** works especially well for regular, unsynchronized lyrics.
-- **LRCLIB** provides synchronized lyrics and works well when reachable, but may be slow or unavailable without a VPN depending on the network.
-- When LRCLIB cannot be reached, the Genius fallback usually still provides lyrics, but with lower reliability and without synchronization.
+> [!NOTE]
+> The original EeveeSpotify repository was disabled due to a [DMCA takedown](https://github.com/github/dmca/blob/master/2025/08/2025-08-14-spotify.md). This repository will not contain IPA packages in the repo itself.
 
 Release files may also be shared in Telegram at [@ESRClean](https://t.me/ESRClean) if GitHub distribution is unavailable.
 
 This tweak makes Spotify think you have a Premium subscription, granting free listening, just like Spotilife, and provides some additional features like custom lyrics.
 
-> [!NOTE]
-> The original EeveeSpotify repository was disabled due to a [DMCA takedown](https://github.com/github/dmca/blob/master/2025/08/2025-08-14-spotify.md). This repository will not contain IPA packages in the repo itself.
+## How this fork differs from upstream
 
-## Custom Lyrics Support
+Verified against upstream `Master`, not slogans:
 
-**Spotify 9.1.56 and above** - Full custom lyrics functionality is available with the following providers:
-- **Spicy Lyrics**
-- **Musixmatch(Requires Musixmatch Token)**
-- **PetitLyrics**
-- **LRCLIB**
-- **Genius**
+- **Lyrics rework.** Per-track lookup state, single-flight provider requests,
+  Genius fallback when the primary source misses, instrumental detection via
+  LRCLIB probe, and `hide-on-error` that drops the card instead of showing an
+  empty one.
+- **Lyrics cards where 9.1.x omits them.** The lower Now Playing card is
+  injected when the catalog response has no lyrics section (and re-identified
+  per track so fast skips don't paint old lyrics), with the palette matched to
+  the artwork. Upstream has neither the injection nor the palette fallback.
+- **Login protection without logout loops.** Session hooks forward Spotify's
+  auth lifecycle instead of blocking it; only the narrow credential-deletion
+  request is cancelled. Upstream blocks `logout`/`destroy` outright, which is
+  where the logout loops came from.
+- **No secrets in git, no feature bloat.** No hardcoded provider keys (the token
+  is read from Spotify's own requests), no LiquidGlass/flag-browser glitter —
+  about 40 fewer files than upstream for things this tweak is not about.
+- **AMOLED theme, analytics hardening, rating-prompt blocker.**
+- **Release-like builds by default.** Diagnostics live behind `EEVEE_DEBUG=1`
+  (see below), not in the IPA you listen to every day.
+- **Tests that run.** Focused `swiftc` suites plus a configuration-snapshot
+  check, executed by `build-debs-local.sh` before every local package build.
 
-> [!NOTE]
-> Lyrics support is still being improved, especially when external providers are slow or unavailable.
+## Lyrics status
+
+Custom lyrics on Spotify `9.1.x` are usable — not perfect, but this is already a win.
+
+Providers (pick one in settings, Genius fallback is optional):
+
+- **Spicy Lyrics** — word-synced where available.
+- **Musixmatch** — the service Spotify uses; time-synced for many songs, but needs
+  a user token. To obtain it, download Musixmatch from the App Store, sign up,
+  then go to Settings > Get help > Copy debug info and paste it into the
+  EeveeSpotify prompt. You can also extract the token using MITM.
+- **LRCLIB** — the most open service, time-synced, but lacks lyrics for many songs
+  and may be slow or unreachable without a VPN depending on the network.
+- **Genius** — best coverage and fastest updates, never time-synced. Also serves
+  as the automatic fallback when the primary source finds nothing.
+- **PetitLyrics** — plenty of time-synced Japanese and some international lyrics.
+
+Notes:
+
+- When LRCLIB cannot be reached, the Genius fallback usually still provides
+  lyrics, but without synchronization.
+- If the tweak cannot find a song, you'll see a "Couldn't load the lyrics for
+  this song" message (or no card at all with hide-on-error). Lyrics may be wrong
+  for some songs with Genius due to text search — kindly refrain from opening
+  issues about it.
 
 ## How to build an EeveeSpotify IPA using Github actions
 > [!NOTE]
-> If this your first time, complete following steps before starting:
+> If this is your first time, complete the following steps before starting:
 >
 > 1. Fork this repository using the fork button on the top right
 > 2. On your forked repository, go to **Repository Settings** > **Actions**, enable **Read and Write** permissions.
@@ -67,7 +103,7 @@ legacy broad response blocking are disabled. To build a separate diagnostic
 variant locally, set `EEVEE_DEBUG=1`; its IPA receives a `-debug` suffix:
 
 ```sh
-EEVEE_DEBUG=1 ./build-ipa-local.sh Spotify_v9.1.76.ipa
+EEVEE_DEBUG=1 ./build-ipa-local.sh Spotify_v9.1.80.ipa
 ```
 
 Use the default command without `EEVEE_DEBUG=1` for the regular release-like
@@ -75,15 +111,24 @@ IPA. The debug variant retains the old broad response behavior as a
 compatibility fallback; set `EEVEE_DISABLE_LEGACY_RESPONSE_BLOCKS=1` at runtime
 to disable it while investigating a problem.
 
+## Local tests
+
+`./build-debs-local.sh` runs the focused Swift suites and the
+configuration-snapshot check before building both jailbreak packages
+(rootless + roothide). Use `./build-debs-local.sh --skip-tests` to skip them.
+The Spotify-version → hook-target map lives in `version-update-locations.txt`.
+
 ## The History
 
 In January 2024, Spotilife, the only tweak to get Spotify Premium, stopped working on new Spotify versions. [whoeevee](https://github.com/whoeevee) decompiled Spotilife, reverse-engineered Spotify, intercepted requests, etc., and created this tweak.
 
-In December 2025, whoeevee, the maintainer of the EeveeSpotify tweak at the time, announced he'll be discontinuing the tweak because of the burden of keeping up with Spotify's constantly changing architectures. Soon after, [Meep1](https://github.com/Meeep1), forks the original Eevee repo and continues to develop the tweak to support newer Spotify versions, under the project name EeveeSpotiyRevivedPublic.
+In December 2025, whoeevee announced he'll be discontinuing the tweak because of the burden of keeping up with Spotify's constantly changing architectures. Soon after, [Skye](https://github.com/Meeep1) forked the original repo and continued development under the name EeveeSpotifyRevivedPublic.
 
-In  March 2026, the latest EeveeSpotifyRevivedPublic release, v9.1.28, users experienced constant logging out issues and reported to Skye, however, at the time of this README.md written, EeveeSpotifyRevivedPublic hasn't released any newer updates. During March, I've been constantly annoyed by the logout issue and decided to take matters into my own hands and forked EeveeSpotifyRevivedPublic and fixed the logout issue, which will eventually lead to the creation of this repository, which will be continuing the legacy of EeveeSpotify for newer versions of Spotify.
+In March 2026, EeveeSpotifyRevivedPublic users hit constant logout issues with no fix in sight. I forked it, fixed the logout problem, and that fork became the upstream [EeveeSpotifyReincarnated](https://github.com/SideloadLabs/EeveeSpotifyReincarnated) project, now maintained by [jaydenjcpy](https://github.com/jaydenjcpy), [Ryuk](https://github.com/faroukbmiled) and [Mod4](https://github.com/M0d-4).
 
-
+This repository is my clean fork of that project: same roots, my own direction —
+the lyrics rework, the no-block login protection, no bloat, release-like builds.
+See [How this fork differs](#how-this-fork-differs-from-upstream) for the full list.
 
 ## Restrictions
 
@@ -95,29 +140,18 @@ Please refrain from opening issues about the following features, as they are ser
 - AI DJ/Playlist
 - Spotify Connect (When using Spotify Connect, the device will act as a remote control and stream directly to the connected device. This is a server-sided limitation and is beyond the control of EeveeSpotify, so it will behave as if you have a Free subscription while using this feature.)
 
-## [Common Issues](https://github.com/nodzen/EeveeSpotifyReincarnated/blob/Master/common_issues.md)
-Please check out the hyperlink above before opening an issue
-
-
-## Lyrics Support
-
-EeveeSpotify replaces Spotify monthly limited lyrics with one of the following four lyrics providers:
-
-- Genius: Offers the best quality lyrics, provides the most songs, and updates lyrics the fastest. Does not and will never be time-synced.
-
-- LRCLIB: The most open service, offering time-synced lyrics. However, it lacks lyrics for many songs.
-
-- Musixmatch: The service Spotify uses. Provides time-synced lyrics for many songs, but you'll need a user token to use this source. To obtain the token, download Musixmatch from the App Store, sign up, then go to Settings > Get help > Copy debug info, and paste it into EeveeSpotify alert. You can also extract the token using MITM.
-
-- PetitLyrics: Offers plenty of time-synced Japanese and some international lyrics.
-
-If the tweak is unable to find a song or process the lyrics, you'll see a "Couldn't load the lyrics for this song" message. The lyrics might be wrong for some songs when using Genius due to how the tweak searches songs. While I've made it work in most cases, kindly refrain from opening issues about it.
+## [Common Issues](common_issues.md)
+Please check out the page above before opening an issue.
 
 ## How It Works
 
 EeveeSpotify intercepts Spotify requests to load user data, deserializes it, and modifies the parameters in real-time. This method works incredibly stable across supported Spotify versions.
 
 The tweak also sets `trackRowsEnabled` to `true`, allowing you to see track rows and liked tracks on artist pages just like with Premium.
+
+Supported targets: `8.9.8` (last for iOS 14), `9.0.48` (last for iOS 15),
+`9.1.x`, and newer (`latest`, forward-compatible). Details in
+`version-update-locations.txt`.
 
 ## Installation
 
@@ -128,19 +162,19 @@ To open Spotify links in sideloaded app, use [OpenSpotifySafariExtension](https:
 ## Credits
 Thanks for all of the community's support, also, thanks to all the devs who worked along with me to revive this project Go check the other dev's out:
 
-[Ryuk](https://github.com/faroukbmiled) 
+[Ryuk](https://github.com/faroukbmiled)
 
 [Mod4](https://github.com/M0d-4)
 
 [estrogencat](https://github.com/estrogencat)
 
-[Skye](https://github.com/Meeep1) 
+[Skye](https://github.com/Meeep1)
 
-[whoeevee](https://github.com/whoeevee) 
+[whoeevee](https://github.com/whoeevee)
 
 ## Disclaimer
 
-This project is an **independent modification (tweak)** for the Spotify app. We are **not affiliated, associated, authorized, endorsed by, or in any way officially connected with Spotify**, or any of its subsidiaries or affiliates. 
+This project is an **independent modification (tweak)** for the Spotify app. We are **not affiliated, associated, authorized, endorsed by, or in any way officially connected with Spotify**, or any of its subsidiaries or affiliates.
 
 This tweak is created solely for **personal and educational purposes**. Use it at your own risk.
 
@@ -148,10 +182,6 @@ This tweak is created solely for **personal and educational purposes**. Use it a
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=SideloadLabs%2FEeveeSpotifyReincarnated&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=SideloadLabs/EeveeSpotifyReincarnated&type=date&theme=dark&legend=top-left&sealed_token=C1hKWTv3UNdLAgsZjjCL7Rthp6YSGB4Mm9kIalnH1lgZXZnYVL09WbBt57E-FFzQXg8gZyFOW356S5XMTWmvQdIuEihF66WxqGuJTejmAdJx5XJHxC2l3A" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=SideloadLabs/EeveeSpotifyReincarnated&type=date&legend=top-left&sealed_token=C1hKWTv3UNdLAgsZjjCL7Rthp6YSGB4Mm9kIalnH1lgZXZnYVL09WbBt57E-FFzQXg8gZyFOW356S5XMTWmvQdIuEihF66WxqGuJTejmAdJx5XJHxC2l3A" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=SideloadLabs/EeveeSpotifyReincarnated&type=date&legend=top-left&sealed_token=C1hKWTv3UNdLAgsZjjCL7Rthp6YSGB4Mm9kIalnH1lgZXZnYVL09WbBt57E-FFzQXg8gZyFOW356S5XMTWmvQdIuEihF66WxqGuJTejmAdJx5XJHxC2l3A" />
- </picture>
+<a href="https://www.star-history.com/?repos=nodzen%2FEeveeSpotifyReincarnatedClean&type=date&legend=top-left">
+  <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=nodzen/EeveeSpotifyReincarnatedClean&type=date&legend=top-left" />
 </a>

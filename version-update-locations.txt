@@ -1,7 +1,7 @@
 EeveeSpotify Version Update Locations
 =====================================
 
-When bumping the version, update these 2 files:
+When bumping the version, update these 3 files:
 
 1. control
    - Line 3: Version: X.X.X
@@ -10,6 +10,10 @@ When bumping the version, update these 2 files:
 2. Sources/EeveeSpotify/Tweak.x.swift
    - Update `static let version = "X.X.X"`
    - Example: static let version = "6.4.5"
+
+3. README.md
+   - Update the `Release:` badge in the header
+   - Example: **Release:** `6.4.5`
 
 `build-ipa-local.sh` reads the IPA version automatically from `control`; no separate edit is needed.
 
