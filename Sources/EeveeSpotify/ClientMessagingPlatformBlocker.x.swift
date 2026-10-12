@@ -94,33 +94,37 @@ class CMPBannerViewHook: ClassHook<UIView> {
 // Upsell "element" views rendered from Hub/queue component trees. Named
 // targets (UpsellBanner/PremiumUpsell in the class name), so no DSA or status
 // UI can match.
-class UpsellBannerElementUIHook: ClassHook<UIView> {
+//
+// 9.1.x split the element from its view: `Upsells_ElementKit.UpsellBannerElementUI`
+// and `Jam_QueueIntegrationImpl.PremiumUpsellBannerElementUI` inherit straight
+// from SwiftObject and only carry a `bannerView`/`view` reference, so a
+// ClassHook<UIView> on them fails with targetHasIncompatibleType and the upsell
+// stays on screen. Hook the UIKit views those models actually render.
+class UpsellBannerViewHook: ClassHook<UIView> {
     typealias Group = UpsellElementViewGroup
-    static let targetName =
-        "_TtC18Upsells_ElementKitP33_11E507536F1F78CA735FB7F17658749321UpsellBannerElementUI"
+    static let targetName = "_TtC13Upsells_UIKit29SelfLoadingUpsellBannerUIView"
 
     func didMoveToSuperview() {
         orig.didMoveToSuperview()
         target.isHidden = true
         target.isUserInteractionEnabled = false
         if target.superview != nil {
-            cmpLog("suppressed UpsellBannerElementUI")
+            cmpLog("suppressed SelfLoadingUpsellBannerUIView")
             target.removeFromSuperview()
         }
     }
 }
 
-class PremiumUpsellBannerElementUIHook: ClassHook<UIView> {
+class PremiumUpsellBannerViewHook: ClassHook<UIView> {
     typealias Group = UpsellElementViewGroup
-    static let targetName =
-        "_TtC24Jam_QueueIntegrationImpl28PremiumUpsellBannerElementUI"
+    static let targetName = "_TtC20PremiumUpsell_ECMKit30PremiumUpsellHeaderCentralView"
 
     func didMoveToSuperview() {
         orig.didMoveToSuperview()
         target.isHidden = true
         target.isUserInteractionEnabled = false
         if target.superview != nil {
-            cmpLog("suppressed PremiumUpsellBannerElementUI")
+            cmpLog("suppressed PremiumUpsellHeaderCentralView")
             target.removeFromSuperview()
         }
     }
@@ -154,8 +158,8 @@ func activateClientMessagingPlatformBlocker() {
 
     let viewHooks: [(String, String, () -> Void)] = [
         (CMPBannerViewHook.targetName, "CMPBannerView", { CMPBannerViewGroup().activate() }),
-        (UpsellBannerElementUIHook.targetName, "UpsellBannerElementUI", { UpsellElementViewGroup().activate() }),
-        (PremiumUpsellBannerElementUIHook.targetName, "PremiumUpsellBannerElementUI", { UpsellElementViewGroup().activate() }),
+        (UpsellBannerViewHook.targetName, "SelfLoadingUpsellBannerUIView", { UpsellElementViewGroup().activate() }),
+        (PremiumUpsellBannerViewHook.targetName, "PremiumUpsellHeaderCentralView", { UpsellElementViewGroup().activate() }),
         (PremiumUpsellControlPanelHook.targetName, "PremiumUpsellControlPanel", { UpsellElementViewGroup().activate() }),
     ]
 

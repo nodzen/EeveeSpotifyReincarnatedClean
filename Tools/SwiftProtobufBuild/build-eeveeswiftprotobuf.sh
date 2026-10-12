@@ -30,6 +30,20 @@ fi
 
 color() { printf '\033[1;32m==> %s\033[0m\n' "$*"; }
 
+# swift-protobuf is a pinned third-party dependency: an existing framework is
+# only stale if SWIFTPROTOBUF_VERSION changes, and rebuilding it costs minutes.
+if [ -f "$OUT/$MODULE" ] && [ -d "$OUT/Modules" ]; then
+    color "$MODULE.framework already built; skipping"
+    exit 0
+fi
+
+# macOS prunes /tmp files, which can leave .git behind with the sources gone.
+# That partial tree then fails to compile, so treat it as no checkout at all.
+if [ -d "$SRC/.git" ] && [ "$(find "$SRC/Sources/SwiftProtobuf" -name '*.swift' 2>/dev/null | wc -l | tr -d ' ')" -lt 50 ]; then
+    color "Source checkout in $SRC is incomplete; re-cloning"
+    rm -rf "$SRC"
+fi
+
 if [ ! -d "$SRC/.git" ]; then
     color "Cloning apple/swift-protobuf $VERSION"
     rm -rf "$SRC"
