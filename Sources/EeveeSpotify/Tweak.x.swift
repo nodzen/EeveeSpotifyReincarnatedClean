@@ -498,6 +498,10 @@ struct EeveeSpotify: Tweak {
             InstgramDestinationGroup().activate()
         }
         
+        if UserDefaults.darkPopUps {
+            DarkPopUps().activate()
+        }
+        
         if UserDefaults.patchType.isPatching {
             activatePremiumPatchingGroup()
         }
