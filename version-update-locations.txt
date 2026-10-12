@@ -17,3 +17,17 @@ These values must match for consistent versioning across:
 - .deb packages (control)
 - Tweak runtime (Tweak.x.swift)
 - IPA builds (build-ipa-local.sh)
+
+Spotify Version -> Hook Target Map
+===================================
+(Sources/EeveeSpotify/Tweak.x.swift `hookTarget`, cases in
+ Sources/EeveeSpotify/Shared/Models/VersionHookTarget.swift)
+
+- 8.9.8  -> .lastAvailableiOS14  (last Spotify for iOS 14)
+- 9.0.48 -> .lastAvailableiOS15  (last Spotify for iOS 15)
+- 9.1.x  -> .v91                 (current family, guarded per-build)
+- else   -> .latest              (older/newer, modern hook set)
+
+Init flow: init() -> configureCommon() (all versions),
+then .v91 -> configureV91() | otherwise -> configurePre91AndLatest().
+Rule: match raw version strings only inside `hookTarget`.

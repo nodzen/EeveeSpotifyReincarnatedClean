@@ -224,6 +224,9 @@ struct EeveeSpotify: Tweak {
         
         NSLog("[EeveeSpotify] Detected Spotify version: \(version)")
         
+        // Version -> target mapping. Exact pins are the last builds for
+        // dropped iOS versions; the 9.1 family is matched by prefix;
+        // everything else falls into .latest (see VersionHookTarget).
         switch version {
         case "9.0.48":
             return .lastAvailableiOS15
@@ -272,6 +275,19 @@ struct EeveeSpotify: Tweak {
             return
         }
 
+        configureCommon()
+
+        // Version split: each Spotify family gets its own configuration.
+        // Mapping lives in VersionHookTarget / hookTarget above.
+        if EeveeSpotify.hookTarget == .v91 {
+            configureV91()
+            return
+        }
+        configurePre91AndLatest()
+    }
+
+    /// Hooks that run on every Spotify version, before the version split.
+    private func configureCommon() {
         // Best-effort disablement of embedded analytics SDK collection. The
         // URLSession classifier is still required because SDK initialization
         // order and available selectors vary across Spotify builds.
@@ -326,9 +342,9 @@ struct EeveeSpotify: Tweak {
         // swizzles. Installed unconditionally; cleaning is gated per-call by the toggle.
         PasteboardConcreteSwizzler.install()
 
-        // Activate before the Spotify 9.1.x-specific path, which returns early
-        // later in this initializer. The setting is read at launch because Orion
-        // hook groups cannot be deactivated safely in the running process.
+        // Activate before the version-specific configuration below. The setting
+        // is read at launch because Orion hook groups cannot be deactivated
+        // safely in the running process.
         activateAmoledTheme()
 
         // Activate session logout protection first.
@@ -378,121 +394,123 @@ struct EeveeSpotify: Tweak {
             writeDebugLog("[INIT] All \(hookTargets.count) hook targets verified")
         }
 
-        // For 9.1.x, activate premium patching and lyrics
-        if EeveeSpotify.hookTarget == .v91 {
+    }
 
-            // Premium patching (9.1.x)
-            // Always activate the *bootstrap interceptor*; it is required for premium patching.
-            if UserDefaults.patchType.isPatching {
-                PremiumBootstrapGroup().activate()
-                writeDebugLog("[INIT] Activated PremiumBootstrapGroup")
+    /// Spotify 9.1.x configuration. Runs instead of configurePre91AndLatest().
+    private func configureV91() {
+        // Premium patching (9.1.x)
+        // Always activate the *bootstrap interceptor*; it is required for premium patching.
+        if UserDefaults.patchType.isPatching {
+            PremiumBootstrapGroup().activate()
+            writeDebugLog("[INIT] Activated PremiumBootstrapGroup")
 
-                // Optional UI hooks (safe-gated)
-                if let hub = NSClassFromString("HUBViewModelBuilderImplementation"),
-                   class_getInstanceMethod(hub, NSSelectorFromString("addJSONDictionary:")) != nil {
-                    PremiumUIHooksGroup().activate()
-                } else {
-                    writeDebugLog("[INIT] Skipped PremiumUIHooksGroup (missing HUBViewModelBuilderImplementation/addJSONDictionary:)")
-                }
-
-                activateV91ServerSidedReminderIfAvailable()
-            }
-
-            let lyricsEnabled = UserDefaults.lyricsSource.isReplacingLyrics
-
-            // Lyrics hooks (guarded)
-            if lyricsEnabled {
-                let fullscreenOK: Bool = {
-                    // For 9.1.x, targetName resolves to Lyrics_FullscreenElementPageImpl.FullscreenElementViewController
-                    if let cls = NSClassFromString("Lyrics_FullscreenElementPageImpl.FullscreenElementViewController") {
-                        return class_getInstanceMethod(cls, #selector(UIViewController.viewDidLoad)) != nil
-                    }
-                    return false
-                }()
-
-                let npvOK: Bool = {
-                    if let cls = NSClassFromString("NowPlaying_ScrollImpl.NPVScrollViewController") {
-                        return class_getInstanceMethod(cls, #selector(UIViewController.viewDidLoad)) != nil
-                            && class_getInstanceMethod(cls, #selector(UIViewController.viewWillAppear(_:))) != nil
-                            && class_getInstanceMethod(cls, #selector(UIViewController.viewWillDisappear(_:))) != nil
-                    }
-                    return false
-                }()
-
-                if fullscreenOK {
-                    BaseLyricsGroup().activate()
-                    // The patcher only needs to know whether the card must stay
-                    // hidden for a track; waiting for the in-flight provider
-                    // lookup is part of that answer.
-                    ScrollsitaLyricsCardPatcher.installLyricsCardHiddenProvider { trackID in
-                        guard UserDefaults.lyricsOptions.hideOnError else { return false }
-                        awaitLyricsOutcome(trackId: trackID)
-                        return lyricsLookupFailed(trackID)
-                    }
-                } else {
-                    writeDebugLog("[INIT] Skipped BaseLyricsGroup (fullscreen VC missing)")
-                }
-
-                if npvOK {
-                    V91LyricsGroup().activate()
-                } else {
-                    writeDebugLog("[INIT] Skipped V91LyricsGroup (NPVScrollViewController missing)")
-                }
-
-                let playerTrackMetadataOK: Bool = {
-                    guard let cls = NSClassFromString(SPTPlayerTrackV91LyricsAvailabilityHook.targetName) else {
-                        return false
-                    }
-                    return class_getInstanceMethod(cls, NSSelectorFromString("metadata")) != nil
-                }()
-
-                if playerTrackMetadataOK {
-                    V91LyricsAvailabilityGroup().activate()
-                    writeDebugLog("[INIT] Activated 9.1.x lyrics availability metadata hook")
-                } else {
-                    writeDebugLog("[INIT] Skipped 9.1.x lyrics availability hook (SPTPlayerTrack/metadata missing)")
-                }
-
-            }
-
-            // Settings integration (guarded)
-            if let cls = NSClassFromString("ProfileSettingsSection"),
-               class_getInstanceMethod(cls, NSSelectorFromString("numberOfRows")) != nil,
-               class_getInstanceMethod(cls, NSSelectorFromString("didSelectRow:")) != nil,
-               class_getInstanceMethod(cls, NSSelectorFromString("cellForRow:")) != nil {
-
-                UniversalSettingsIntegrationProfileGroup().activate()
-
-                if NSClassFromString("SettingsViewController") != nil {
-                    UniversalSettingsIntegrationSettingsVCGroup().activate()
-                }
-                // RootSettingsViewController was removed in some 9.1.x builds (9.1.36).
-                // Only activate if the class exists.
-                if NSClassFromString("RootSettingsViewController") != nil {
-                    UniversalSettingsIntegrationRootSettingsVCGroup().activate()
-                }
-                // UINavigationController exists; this hook is generic and safe.
-                UniversalSettingsIntegrationNavGroup().activate()
-
+            // Optional UI hooks (safe-gated)
+            if let hub = NSClassFromString("HUBViewModelBuilderImplementation"),
+               class_getInstanceMethod(hub, NSSelectorFromString("addJSONDictionary:")) != nil {
+                PremiumUIHooksGroup().activate()
             } else {
-                writeDebugLog("[INIT] Skipped settings integration (ProfileSettingsSection API mismatch)")
+                writeDebugLog("[INIT] Skipped PremiumUIHooksGroup (missing HUBViewModelBuilderImplementation/addJSONDictionary:)")
             }
 
-            // 9.1.44 path — ProfileSettingsSection gone, new SettingsListViewController owns Settings root.
-            if NSClassFromString("_TtC21Settings_PlatformImpl26SettingsListViewController") != nil {
-                UniversalSettingsIntegrationListVCGroup().activate()
-                writeDebugLog("[INIT] Activated SettingsListViewController hook (9.1.44 path)")
-            } else {
-                writeDebugLog("[INIT] Settings_PlatformImpl.SettingsListViewController missing")
-            }
-            NSLog("[EeveeSpotify] Initialization complete for 9.1.x")
-            TrueShuffleHook.install()
-            activateEeveeProbes()
-            activateSponsorBlock()
-            activateKaraokeHooks()
-            return
+            activateV91ServerSidedReminderIfAvailable()
         }
 
+        let lyricsEnabled = UserDefaults.lyricsSource.isReplacingLyrics
+
+        // Lyrics hooks (guarded)
+        if lyricsEnabled {
+            let fullscreenOK: Bool = {
+                // For 9.1.x, targetName resolves to Lyrics_FullscreenElementPageImpl.FullscreenElementViewController
+                if let cls = NSClassFromString("Lyrics_FullscreenElementPageImpl.FullscreenElementViewController") {
+                    return class_getInstanceMethod(cls, #selector(UIViewController.viewDidLoad)) != nil
+                }
+                return false
+            }()
+
+            let npvOK: Bool = {
+                if let cls = NSClassFromString("NowPlaying_ScrollImpl.NPVScrollViewController") {
+                    return class_getInstanceMethod(cls, #selector(UIViewController.viewDidLoad)) != nil
+                        && class_getInstanceMethod(cls, #selector(UIViewController.viewWillAppear(_:))) != nil
+                        && class_getInstanceMethod(cls, #selector(UIViewController.viewWillDisappear(_:))) != nil
+                }
+                return false
+            }()
+
+            if fullscreenOK {
+                BaseLyricsGroup().activate()
+                // The patcher only needs to know whether the card must stay
+                // hidden for a track; waiting for the in-flight provider
+                // lookup is part of that answer.
+                ScrollsitaLyricsCardPatcher.installLyricsCardHiddenProvider { trackID in
+                    guard UserDefaults.lyricsOptions.hideOnError else { return false }
+                    awaitLyricsOutcome(trackId: trackID)
+                    return lyricsLookupFailed(trackID)
+                }
+            } else {
+                writeDebugLog("[INIT] Skipped BaseLyricsGroup (fullscreen VC missing)")
+            }
+
+            if npvOK {
+                V91LyricsGroup().activate()
+            } else {
+                writeDebugLog("[INIT] Skipped V91LyricsGroup (NPVScrollViewController missing)")
+            }
+
+            let playerTrackMetadataOK: Bool = {
+                guard let cls = NSClassFromString(SPTPlayerTrackV91LyricsAvailabilityHook.targetName) else {
+                    return false
+                }
+                return class_getInstanceMethod(cls, NSSelectorFromString("metadata")) != nil
+            }()
+
+            if playerTrackMetadataOK {
+                V91LyricsAvailabilityGroup().activate()
+                writeDebugLog("[INIT] Activated 9.1.x lyrics availability metadata hook")
+            } else {
+                writeDebugLog("[INIT] Skipped 9.1.x lyrics availability hook (SPTPlayerTrack/metadata missing)")
+            }
+
+        }
+
+        // Settings integration (guarded)
+        if let cls = NSClassFromString("ProfileSettingsSection"),
+           class_getInstanceMethod(cls, NSSelectorFromString("numberOfRows")) != nil,
+           class_getInstanceMethod(cls, NSSelectorFromString("didSelectRow:")) != nil,
+           class_getInstanceMethod(cls, NSSelectorFromString("cellForRow:")) != nil {
+
+            UniversalSettingsIntegrationProfileGroup().activate()
+
+            if NSClassFromString("SettingsViewController") != nil {
+                UniversalSettingsIntegrationSettingsVCGroup().activate()
+            }
+            // RootSettingsViewController was removed in some 9.1.x builds (9.1.36).
+            // Only activate if the class exists.
+            if NSClassFromString("RootSettingsViewController") != nil {
+                UniversalSettingsIntegrationRootSettingsVCGroup().activate()
+            }
+            // UINavigationController exists; this hook is generic and safe.
+            UniversalSettingsIntegrationNavGroup().activate()
+
+        } else {
+            writeDebugLog("[INIT] Skipped settings integration (ProfileSettingsSection API mismatch)")
+        }
+
+        // 9.1.44 path — ProfileSettingsSection gone, new SettingsListViewController owns Settings root.
+        if NSClassFromString("_TtC21Settings_PlatformImpl26SettingsListViewController") != nil {
+            UniversalSettingsIntegrationListVCGroup().activate()
+            writeDebugLog("[INIT] Activated SettingsListViewController hook (9.1.44 path)")
+        } else {
+            writeDebugLog("[INIT] Settings_PlatformImpl.SettingsListViewController missing")
+        }
+        NSLog("[EeveeSpotify] Initialization complete for 9.1.x")
+        TrueShuffleHook.install()
+        activateEeveeProbes()
+        activateSponsorBlock()
+        activateKaraokeHooks()
+    }
+
+    /// Pre-9.1 and post-9.1 (latest) configuration. Skipped on 9.1.x.
+    private func configurePre91AndLatest() {
         // For other versions, activate all features normally
         if UserDefaults.experimentsOptions.showInstagramDestination {
             InstgramDestinationGroup().activate()
