@@ -30,6 +30,20 @@ struct EeveeMiscellaneousSettingsView: View {
                     isOn: $blockRatingPrompts
                 )
             }
+
+            Section(footer: Text("livecontainer_sharing_description".localized)) {
+                Toggle(
+                    "livecontainer_sharing".localized,
+                    isOn: Binding<Bool>(
+                        get: { UserDefaults.experimentsOptions.liveContainerSharing },
+                        set: {
+                            var options = UserDefaults.experimentsOptions
+                            options.liveContainerSharing = $0
+                            UserDefaults.experimentsOptions = options
+                        }
+                    )
+                )
+            }
         }
         .listStyle(GroupedListStyle())
         .onChange(of: blockSpotifyAnalytics) { enabled in

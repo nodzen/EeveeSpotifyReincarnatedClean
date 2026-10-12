@@ -89,18 +89,9 @@ struct EeveeSettingsView: View {
                 )
             }
             
-            Button {
-                pushSettingsController(
-                    with: EeveeExperimentsSettingsView(),
-                    title: "experiments".localized
-                )
-            } label: {
-                NavigationSectionView(
-                    color: .purple,
-                    title: "experiments".localized,
-                    imageSystemName: "sparkle"
-                )
-            }
+            // Experiments section hidden: only LiveContainer sharing (moved to
+            // Miscellaneous) and a pre-9.1 toggle live there. View + options
+            // model kept for future experiments.
 
             if EeveeSpotify.isSpotify91Family {
                 Button {

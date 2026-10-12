@@ -1,0 +1,241 @@
+{"app_name":"LiveContainer","timestamp":"2026-10-12 15:21:20.00 +0300","app_version":"3.8.10","slice_uuid":"10a2f666-f59a-316b-9dd8-f0ee0498649b","build_version":"3.8.10","platform":2,"bundleID":"com.kdt.livecontainer.BL24RS39DY","share_with_app_devs":0,"is_first_party":0,"bug_type":"309","os_version":"iPhone OS 27.2 (24B5099f)","roots_installed":0,"name":"LiveContainer","incident_id":"5BBA92E5-1DF6-4802-B15F-6C57291B55BE"}
+{
+  "uptime" : 290000,
+  "procRole" : "Foreground",
+  "version" : 2,
+  "userID" : 501,
+  "deployVersion" : 210,
+  "modelCode" : "iPhone18,3",
+  "coalitionID" : 1142,
+  "osVersion" : {
+    "isEmbedded" : true,
+    "train" : "iPhone OS 27.2",
+    "releaseType" : "Beta",
+    "build" : "24B5099f"
+  },
+  "captureTime" : "2026-10-12 15:21:20.2811 +0300",
+  "codeSigningMonitor" : 2,
+  "incident" : "5BBA92E5-1DF6-4802-B15F-6C57291B55BE",
+  "pid" : 21395,
+  "translated" : false,
+  "cpuType" : "ARM-64",
+  "procLaunch" : "2026-10-12 15:21:20.0507 +0300",
+  "procStartAbsTime" : 7024475466238,
+  "procExitAbsTime" : 7024480490145,
+  "procName" : "LiveContainer",
+  "procPath" : "\/private\/var\/containers\/Bundle\/Application\/A2901E47-AF33-46A4-BB33-CC4632BB284E\/LiveContainer.app\/LiveContainer",
+  "bundleInfo" : {"CFBundleShortVersionString":"3.8.10","CFBundleVersion":"3.8.10","CFBundleIdentifier":"com.kdt.livecontainer.BL24RS39DY"},
+  "storeInfo" : {"deviceIdentifierForVendor":"E3798875-0937-466C-8C8B-E160F7AAA83C","thirdParty":true},
+  "parentProc" : "launchd",
+  "parentPid" : 1,
+  "coalitionName" : "com.kdt.livecontainer.BL24RS39DY",
+  "crashReporterKey" : "f54f1e737112d407376058dc3a494d213b94f93e",
+  "developerMode" : 1,
+  "bootProgressRegister" : "0x2000000c",
+  "wasUnlockedSinceBoot" : 1,
+  "isLocked" : 0,
+  "codeSigningID" : "com.kdt.livecontainer.BL24RS39DY",
+  "codeSigningTeamID" : "BL24RS39DY",
+  "codeSigningFlags" : 570434309,
+  "codeSigningValidationCategory" : 3,
+  "codeSigningTrustLevel" : 4,
+  "codeSigningAuxiliaryInfo" : 9007199254740992,
+  "instructionByteStream" : {"beforePC":"IAAg1IEF+LfpAwC54gMDquMDBKrkAwWq5QMGquYDB6rnAwiq2gEAlA==","atPC":"IAAg1IgSgFL\/EwC56AcA+UgAgFLoAwA5IBQA8ACQHZEjFADwY0AqkQ=="},
+  "bootSessionUUID" : "EA54809B-DCAA-44BC-A9DB-55AA30BAE9B8",
+  "basebandVersion" : "2.20.04",
+  "exception" : {"codes":"0x0000000000000001, 0x000000019eb1a328","rawCodes":[1,6957409064],"type":"EXC_BREAKPOINT","signal":"SIGTRAP"},
+  "termination" : {"flags":0,"code":5,"namespace":"SIGNAL","indicator":"Trace\/BPT trap: 5","byProc":"exc handler","byPid":21395},
+  "os_fault" : {"process":"LiveContainer"},
+  "faultingThread" : 0,
+  "threads" : [{"triggered":true,"id":5103444,"threadState":{"x":[{"value":5071097608},{"value":8589934595},{"value":4415210752},{"value":5067047312},{"value":25},{"value":204},{"value":100},{"value":4192256},{"value":18446744065119617024},{"value":4290365414},{"value":0},{"value":0},{"value":140737492957209},{"value":123145306911744},{"value":407552},{"value":0},{"value":8589934595},{"value":3},{"value":0},{"value":166},{"value":6132733504},{"value":2},{"value":62},{"value":4336034256},{"value":4335933044},{"value":2},{"value":6132733728},{"value":7185103280,"symbolLocation":0,"symbol":"partial apply for thunk for @callee_guaranteed () -> (@out A, @error @owned Error)"},{"value":8571165888,"symbolLocation":0,"symbol":"value witness table for ()"}],"flavor":"ARM_THREAD_STATE64","lr":{"value":6957409064},"cpsr":{"value":1610612736},"fp":{"value":6132733408},"sp":{"value":6132733264},"esr":{"value":4060086273,"description":"(Breakpoint) brk 1"},"pc":{"value":6957409064,"matchesCrashFrame":1},"far":{"value":0}},"queue":"error-handler-queue","frames":[{"imageOffset":2331432,"symbol":"_assertionFailure(_:_:file:line:flags:)","symbolLocation":172,"imageIndex":11},{"imageOffset":2250120,"symbol":"fatalError(_:file:line:)","symbolLocation":104,"imageIndex":11},{"imageOffset":41052,"imageIndex":9},{"imageOffset":84324,"imageIndex":9},{"imageOffset":34340,"imageIndex":9},{"imageOffset":38684,"imageIndex":9},{"imageOffset":6660,"symbol":"partial apply for thunk for @callee_guaranteed () -> (@out A, @error @owned Error)","symbolLocation":28,"imageIndex":12},{"imageOffset":6592,"symbol":"partial apply for thunk for @callee_guaranteed () -> (@out A, @error @owned Error)","symbolLocation":16,"imageIndex":12},{"imageOffset":6448,"symbol":"closure #1 in closure #1 in OS_dispatch_queue._syncHelper<A>(fn:execute:rescue:)","symbolLocation":192,"imageIndex":12},{"imageOffset":5956,"symbol":"partial apply for thunk for @callee_guaranteed () -> ()","symbolLocation":28,"imageIndex":12},{"imageOffset":6700,"symbol":"thunk for @escaping @callee_guaranteed () -> ()","symbolLocation":28,"imageIndex":12},{"imageOffset":114612,"symbol":"_dispatch_client_callout","symbolLocation":16,"imageIndex":13},{"imageOffset":74032,"symbol":"_dispatch_lane_barrier_sync_invoke_and_complete","symbolLocation":56,"imageIndex":13},{"imageOffset":6156,"symbol":"implicit closure #2 in implicit closure #1 in OS_dispatch_queue.asyncAndWait<A>(execute:)","symbolLocation":184,"imageIndex":12},{"imageOffset":5920,"symbol":"partial apply for implicit closure #2 in implicit closure #1 in OS_dispatch_queue.sync<A>(execute:)","symbolLocation":76,"imageIndex":12},{"imageOffset":5560,"symbol":"OS_dispatch_queue._syncHelper<A>(fn:execute:rescue:)","symbolLocation":400,"imageIndex":12},{"imageOffset":5116,"symbol":"OS_dispatch_queue.asyncAndWait<A>(execute:)","symbolLocation":140,"imageIndex":12},{"imageOffset":4968,"symbol":"OS_dispatch_queue.sync<A>(execute:)","symbolLocation":64,"imageIndex":12},{"imageOffset":30940,"imageIndex":9},{"imageOffset":30104,"imageIndex":9},{"imageOffset":32888,"imageIndex":9},{"imageOffset":1295360,"imageIndex":5},{"imageOffset":1294788,"imageIndex":5},{"imageOffset":1632392,"imageIndex":5},{"imageOffset":1631712,"imageIndex":5},{"imageOffset":60112,"imageIndex":9},{"imageOffset":1775272,"imageIndex":5},{"imageOffset":1666260,"imageIndex":5},{"imageOffset":25984,"symbol":"dyld4::LibSystemHelpers::callInitializer(int, char const* const*, char const* const*, char const* const*, dyld4::ProgramVars const*, void (*)(int, char const* const*, char const* const*, char const* const*, dyld4::ProgramVars const*)) const","symbolLocation":40,"imageIndex":14},{"imageOffset":197476,"symbol":"invocation function for block in dyld4::Loader::findAndRunAllInitializers(dyld4::RuntimeState&) const::$_0::operator()() const","symbolLocation":300,"imageIndex":15},{"imageOffset":204596,"symbol":"invocation function for block in mach_o::Image::forEachInitializer(void (unsigned int) block_pointer) const","symbolLocation":100,"imageIndex":15},{"imageOffset":24624,"symbol":"mach_o::Header::SegmentInfo mach_o::Header::parse_segment_command<true>(mach_o::Header::LoadCommandInfo const&, unsigned short, void (mach_o::Header::SegmentInfo const&, mach_o::Header::SectionInfo const&) block_pointer, mach_o::Error*) const","symbolLocation":408,"imageIndex":15},{"imageOffset":37084,"symbol":"invocation function for block in mach_o::Header::forEachSection(void (mach_o::Header::SectionInfo const&, bool&) block_pointer) const","symbolLocation":172,"imageIndex":15},{"imageOffset":37504,"symbol":"mach_o::Header::forEachSection(void (mach_o::Header::SectionInfo const&, bool&) block_pointer) const","symbolLocation":284,"imageIndex":15},{"imageOffset":204060,"symbol":"mach_o::Image::forEachInitializer(void (unsigned int) block_pointer) const","symbolLocation":244,"imageIndex":15},{"imageOffset":322304,"symbol":"dyld4::Loader::findAndRunAllInitializers(dyld4::RuntimeState&) const::$_0::operator()() const","symbolLocation":116,"imageIndex":15},{"imageOffset":644292,"symbol":"dyld4::Loader::findAndRunAllInitializers(dyld4::RuntimeState&) const (.cold.3)","symbolLocation":80,"imageIndex":15},{"imageOffset":203736,"symbol":"dyld4::Loader::findAndRunAllInitializers(dyld4::RuntimeState&) const","symbolLocation":648,"imageIndex":15},{"imageOffset":166916,"symbol":"dyld4::JustInTimeLoader::runInitializers(dyld4::RuntimeState&) const","symbolLocation":36,"imageIndex":15},{"imageOffset":202984,"symbol":"dyld4::Loader::runInitializersBottomUp(dyld4::RuntimeState&, lsl::Vector<AuthenticatedValue<dyld4::Loader const*>>&, lsl::Vector<AuthenticatedValue<dyld4::Loader const*>>&) const","symbolLocation":748,"imageIndex":15},{"imageOffset":202844,"symbol":"dyld4::Loader::runInitializersBottomUp(dyld4::RuntimeState&, lsl::Vector<AuthenticatedValue<dyld4::Loader const*>>&, lsl::Vector<AuthenticatedValue<dyld4::Loader const*>>&) const","symbolLocation":608,"imageIndex":15},{"imageOffset":198124,"symbol":"dyld4::Loader::runInitializersBottomUpPlusUpwardLinks(dyld4::RuntimeState&) const::$_0::operator()() const","symbolLocation":124,"imageIndex":15},{"imageOffset":320436,"symbol":"dyld4::Loader::runInitializersBottomUpPlusUpwardLinks(dyld4::RuntimeState&) const (.cold.3)","symbolLocation":376,"imageIndex":15},{"imageOffset":197960,"symbol":"dyld4::Loader::runInitializersBottomUpPlusUpwardLinks(dyld4::RuntimeState&) const","symbolLocation":396,"imageIndex":15},{"imageOffset":240544,"symbol":"dyld4::APIs::dlopen_from(char const*, int, void*)::$_0::operator()() const","symbolLocation":1788,"imageIndex":15},{"imageOffset":312836,"symbol":"dyld4::APIs::dlopen_from(char const*, int, void*) (.cold.4)","symbolLocation":380,"imageIndex":15},{"imageOffset":207816,"symbol":"dyld4::APIs::dlopen_from(char const*, int, void*)","symbolLocation":832,"imageIndex":15},{"imageOffset":54040,"symbol":"dlopen_nolock","symbolLocation":664,"imageIndex":1},{"imageOffset":46004,"symbol":"__invokeAppMain_block_invoke","symbolLocation":28,"imageIndex":1},{"imageOffset":44080,"symbol":"invokeAppMain","symbolLocation":6260,"imageIndex":1},{"imageOffset":35664,"symbol":"LiveContainerMain","symbolLocation":2360,"imageIndex":1},{"imageOffset":21796,"symbol":"start","symbolLocation":6488,"imageIndex":15}]},{"id":5103446,"frames":[],"threadState":{"x":[{"value":6133297152},{"value":3843},{"value":6132760576},{"value":0},{"value":409602},{"value":18446744073709551615},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":0},"cpsr":{"value":0},"fp":{"value":0},"sp":{"value":6133297152},"esr":{"value":1442840704,"description":"(Syscall)"},"pc":{"value":6930741512},"far":{"value":0}}},{"id":5103448,"frames":[],"threadState":{"x":[{"value":6133870592},{"value":8451},{"value":6133334016},{"value":0},{"value":409604},{"value":18446744073709551615},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":0},"cpsr":{"value":0},"fp":{"value":0},"sp":{"value":6133870592},"esr":{"value":1442840704,"description":"(Syscall)"},"pc":{"value":6930741512},"far":{"value":0}}},{"id":5103458,"frames":[],"threadState":{"x":[{"value":6134444032},{"value":11011},{"value":6133907456},{"value":0},{"value":409602},{"value":18446744073709551615},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0},{"value":0}],"flavor":"ARM_THREAD_STATE64","lr":{"value":0},"cpsr":{"value":0},"fp":{"value":0},"sp":{"value":6134444032},"esr":{"value":1442840704,"description":"(Syscall)"},"pc":{"value":6930741512},"far":{"value":0}}}],
+  "usedImages" : [
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4334141440,
+    "size" : 32768,
+    "uuid" : "10a2f666-f59a-316b-9dd8-f0ee0498649b",
+    "path" : "\/private\/var\/containers\/Bundle\/Application\/A2901E47-AF33-46A4-BB33-CC4632BB284E\/LiveContainer.app\/LiveContainer",
+    "name" : "LiveContainer"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4334551040,
+    "size" : 98304,
+    "uuid" : "6abde33e-c957-3c61-b4ab-d11fc4196903",
+    "path" : "\/private\/var\/containers\/Bundle\/Application\/A2901E47-AF33-46A4-BB33-CC4632BB284E\/LiveContainer.app\/Frameworks\/LiveContainerShared.framework\/LiveContainerShared",
+    "name" : "LiveContainerShared"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4693753856,
+    "size" : 210010112,
+    "uuid" : "f51dbd93-3b8f-3a12-9431-96c606e3afc2",
+    "path" : "\/private\/var\/mobile\/Containers\/Data\/Application\/49FEFCB4-DD7C-4064-B907-8D428EBC3A70\/Documents\/Applications\/com.spotify.client.app\/Spotify",
+    "name" : "Spotify"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4335124480,
+    "size" : 49152,
+    "uuid" : "dd50d526-2f53-30b5-b03d-b4ef3a00dc5d",
+    "path" : "\/private\/var\/mobile\/Containers\/Data\/Application\/49FEFCB4-DD7C-4064-B907-8D428EBC3A70\/Documents\/Applications\/com.spotify.client.app\/Frameworks\/MetaSmartGlassesKit.framework\/MetaSmartGlassesKit",
+    "name" : "MetaSmartGlassesKit"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4457185280,
+    "size" : 4014080,
+    "uuid" : "2029680b-1a64-3589-bf1d-56296a0da4d9",
+    "path" : "\/private\/var\/mobile\/Containers\/Data\/Application\/49FEFCB4-DD7C-4064-B907-8D428EBC3A70\/Documents\/Applications\/com.spotify.client.app\/Frameworks\/SpotifyShared.framework\/SpotifyShared",
+    "name" : "SpotifyShared"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4462706688,
+    "size" : 2392064,
+    "uuid" : "44ff82a8-74d2-3b09-af5b-56b817309c32",
+    "path" : "\/private\/var\/mobile\/Containers\/Data\/Application\/49FEFCB4-DD7C-4064-B907-8D428EBC3A70\/Documents\/Applications\/com.spotify.client.app\/Frameworks\/EeveeSpotify.dylib",
+    "name" : "EeveeSpotify.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 4451844096,
+    "size" : 1032192,
+    "uuid" : "311c9235-70d1-3825-b4fe-015c8f7b134e",
+    "path" : "\/private\/var\/mobile\/Containers\/Data\/Application\/49FEFCB4-DD7C-4064-B907-8D428EBC3A70\/Documents\/Applications\/com.spotify.client.app\/Frameworks\/EeveeSwiftProtobuf.framework\/EeveeSwiftProtobuf",
+    "name" : "EeveeSwiftProtobuf"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4335239168,
+    "size" : 32768,
+    "uuid" : "b93ee40c-3d58-3876-a172-90c1f1f56478",
+    "path" : "\/private\/var\/mobile\/Containers\/Data\/Application\/49FEFCB4-DD7C-4064-B907-8D428EBC3A70\/Documents\/Applications\/com.spotify.client.app\/Frameworks\/zxPluginsInject.dylib",
+    "name" : "zxPluginsInject.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4335501312,
+    "size" : 65536,
+    "uuid" : "adee1f7e-97a0-346b-93e4-12bab55cbbd0",
+    "path" : "\/private\/var\/containers\/Bundle\/Application\/A2901E47-AF33-46A4-BB33-CC4632BB284E\/LiveContainer.app\/Frameworks\/TweakLoader.dylib",
+    "name" : "TweakLoader.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4335894528,
+    "size" : 147456,
+    "uuid" : "bd0ff263-04df-32f9-93b1-e0693cefddbd",
+    "path" : "\/private\/var\/mobile\/Containers\/Data\/Application\/49FEFCB4-DD7C-4064-B907-8D428EBC3A70\/Documents\/Applications\/com.spotify.client.app\/Frameworks\/Orion.framework\/Orion",
+    "name" : "Orion"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64",
+    "base" : 4336582656,
+    "size" : 163840,
+    "uuid" : "5e4752c3-e4b1-30ec-8017-6720a34ad2db",
+    "path" : "\/private\/var\/mobile\/Containers\/Data\/Application\/49FEFCB4-DD7C-4064-B907-8D428EBC3A70\/Documents\/Applications\/com.spotify.client.app\/Frameworks\/CydiaSubstrate.framework\/CydiaSubstrate",
+    "name" : "CydiaSubstrate"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 6955077632,
+    "size" : 5982648,
+    "uuid" : "525ffa9f-5bef-3fdc-9f49-820f98804355",
+    "path" : "\/usr\/lib\/swift\/libswiftCore.dylib",
+    "name" : "libswiftCore.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 7185096704,
+    "size" : 89424,
+    "uuid" : "de41fcc2-201d-3d9d-942d-5bc28493d498",
+    "path" : "\/usr\/lib\/swift\/libswiftDispatch.dylib",
+    "name" : "libswiftDispatch.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 7709724672,
+    "size" : 290264,
+    "uuid" : "b0c82e20-552f-3f5e-883a-8b5c5336b337",
+    "path" : "\/usr\/lib\/system\/libdispatch.dylib",
+    "name" : "libdispatch.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 6929829888,
+    "size" : 152988,
+    "uuid" : "191aa242-5c33-3f88-b9ce-d99ae752d058",
+    "path" : "\/usr\/lib\/system\/libdyld.dylib",
+    "name" : "libdyld.dylib"
+  },
+  {
+    "source" : "P",
+    "arch" : "arm64e",
+    "base" : 6929985536,
+    "size" : 751836,
+    "uuid" : "3682d092-c605-3672-a7c9-13bd99df4b0c",
+    "path" : "\/usr\/lib\/dyld",
+    "name" : "dyld"
+  },
+  {
+    "size" : 0,
+    "source" : "A",
+    "base" : 0,
+    "uuid" : "00000000-0000-0000-0000-000000000000"
+  }
+],
+  "sharedCache" : {
+  "base" : 6925254656,
+  "size" : 6570721280,
+  "uuid" : "bc7ad000-739b-398d-a56e-d4d7a6993adb"
+},
+  "vmSummary" : "ReadOnly portion of Libraries: Total=2.6G resident=0K(0%) swapped_out_or_unallocated=2.6G(100%)\nWritable regions: Total=91.8M written=610K(1%) resident=610K(1%) swapped_out=0K(0%) unallocated=91.2M(99%)\n\n                                VIRTUAL   REGION \nREGION TYPE                        SIZE    COUNT (non-coalesced) \n===========                     =======  ======= \nActivity Tracing                   256K        1 \nDeferred Reclaim                  64.0M        1 \nGuard                            385.0G        1 \nMalloc                            17.2M       10 \nMalloc Guard Page                 3104K        4 \nOS Alloc Once                       32K        1 \nStack                             2640K        4 \nStack Guard                         64K        4 \n__AUTH                            7003K      527 \n__AUTH_CONST                     116.9M     1198 \n__CTF                               824        1 \n__DATA                            72.3M     1176 \n__DATA_CONST                      49.4M     1268 \n__DATA_DIRTY                      21.5M     1181 \n__FONT_DATA                        2352        1 \n__LINKEDIT                       671.6M       12 \n__OBJC_RO                        131.1M        1 \n__OBJC_RW                         3369K        1 \n__TEXT                             1.9G     1298 \n__TPRO_CONST                       132K        4 \nmapped file                       34.8M        5 \npage table in kernel               610K        1 \nshared memory                       96K        4 \n===========                     =======  ======= \nTOTAL                            388.1G     6704 \n",
+  "legacyInfo" : {
+  "threadTriggered" : {
+    "queue" : "error-handler-queue"
+  }
+},
+  "logWritingSignature" : "4ff315ddaef7353c4a0237f5ca4d7afcacf42d33",
+  "bug_type" : "309",
+  "roots_installed" : 0,
+  "trmStatus" : 1,
+  "sandboxProfileName" : "container",
+  "spawnFlags" : 17932,
+  "trialInfo" : {
+  "rollouts" : [
+    {
+      "rolloutId" : "6010753cf9bfc4000c247bdd",
+      "factorPackIds" : [
+        "68e56f9d5aac4544d282687d"
+      ],
+      "deploymentId" : 250002286
+    },
+    {
+      "rolloutId" : "64c17a9925d75a7281053d4c",
+      "factorPackIds" : [
+        "64d29746ad29a465b3bbeace"
+      ],
+      "deploymentId" : 250000003
+    }
+  ],
+  "experiments" : [
+
+  ]
+}
+}

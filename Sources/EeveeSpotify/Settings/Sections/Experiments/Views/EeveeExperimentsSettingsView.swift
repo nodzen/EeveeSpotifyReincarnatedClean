@@ -6,13 +6,6 @@ struct EeveeExperimentsSettingsView: View {
 
     var body: some View {
         List {
-            Section(footer: Text("livecontainer_sharing_description".localized)) {
-                Toggle(
-                    "livecontainer_sharing".localized,
-                    isOn: $experimentsOptions.liveContainerSharing
-                )
-            }
-            
             if !EeveeSpotify.isSpotify91OrNewer {
                 Section(
                     footer: Text("show_instagram_destination_description"
