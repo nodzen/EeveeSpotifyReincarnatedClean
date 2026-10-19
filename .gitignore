@@ -37,3 +37,6 @@ build_log.txt
 .website/
 .github/copilot-instructions.md
 scripts/spotify_symbol_diff.py
+
+# decrypted vanilla IPAs kept locally
+ipaclean/

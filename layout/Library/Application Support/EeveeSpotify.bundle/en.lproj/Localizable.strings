@@ -84,6 +84,8 @@ static_color = "Static Color";
 
 color_normalization_factor = "Color Normalization Factor";
 dark_popups = "Dark PopUps";
+disable_liquid_glass = "Remove Liquid Glass (partial)";
+disable_liquid_glass_description = "Removes glass from Spotify chips, search bar and header blur. Navigation buttons stay glassy. Requires app restart.";
 hide_lyrics_under_cover_art = "Hide Lyrics Under Cover Art";
 hide_lyrics_under_cover_art_description = "When enabled, lyrics are not shown beneath the cover and tapping the cover opens it. When disabled, Spotify shows lyrics normally with its hide button. Restart Spotify after changing.";
 amoled_theme = "AMOLED Black Theme";

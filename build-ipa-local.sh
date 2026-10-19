@@ -46,7 +46,7 @@ chmod +x Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh
 Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh
 
 color "2/7  theos make package (debug=${EEVEE_DEBUG:-0})"
-THEOS_PACKAGE_SCHEME=rootless make package FINALPACKAGE=1 EEVEE_DEBUG="${EEVEE_DEBUG:-0}"
+THEOS_PACKAGE_SCHEME=rootless make package FINALPACKAGE=1 EEVEE_DEBUG="${EEVEE_DEBUG:-0}" EeveeSpotify_LDFLAGS="-Wl,-undefined,dynamic_lookup"
 DEB_FILE=$(ls -t packages/com.eevee.spotify_*_iphoneos-arm64.deb 2>/dev/null | head -1)
 [ -n "$DEB_FILE" ] || { echo "deb not produced"; exit 1; }
 

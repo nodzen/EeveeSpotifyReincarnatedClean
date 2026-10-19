@@ -5,6 +5,7 @@ extension UserDefaults {
     
     private static let musixmatchTokenKey = "musixmatchToken"
     private static let darkPopUpsKey = "darkPopUps"
+    private static let disableLiquidGlassKey = "disableLiquidGlass"
     private static let amoledThemeKey = "amoledTheme"
     private static let patchTypeKey = "patchType"
     private static let trueShuffleEnabledKey = "trueShuffleEnabled"
@@ -35,6 +36,17 @@ extension UserDefaults {
         }
         set (darkPopUps) {
             container.set(darkPopUps, forKey: darkPopUpsKey)
+        }
+    }
+
+    /// In-app toggle for the experimental Liquid Glass compatibility mode.
+    /// The Solarium hooks return NO while this is true.
+    static var disableLiquidGlass: Bool {
+        get {
+            container.object(forKey: disableLiquidGlassKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: disableLiquidGlassKey)
         }
     }
 
@@ -154,5 +166,35 @@ extension UserDefaults {
         set {
             container.set(newValue, forKey: debugLoggingEnabledKey)
         }
+    }
+
+    /// Removes every preference owned by EeveeSpotify, leaving Spotify's own
+    /// keys untouched. Used by the "reset tweak settings" recovery action.
+    static func resetEeveeSettings() {
+        let eeveeKeys = [
+            musixmatchTokenKey,
+            darkPopUpsKey,
+            disableLiquidGlassKey,
+            amoledThemeKey,
+            patchTypeKey,
+            trueShuffleEnabledKey,
+            overwriteConfigurationKey,
+            hideLyricsUnderCoverArtKey,
+            lyricsColorsKey,
+            lyricsOptionsKey,
+            hasShownCommonIssuesTipKey,
+            hasPatchedBootstrapKey,
+            iconNamePrettifyKey,
+            cleanShareLinksKey,
+            blockSpotifyAnalyticsKey,
+            debugLoggingEnabledKey,
+            blockRatingPromptsKey,
+            "experimentsOptions",
+            "com.apple.SwiftUI.DisableSolarium",
+        ]
+        for key in eeveeKeys {
+            container.removeObject(forKey: key)
+        }
+        UserDefaults.standard.removeObject(forKey: "com.apple.SwiftUI.DisableSolarium")
     }
 }

@@ -47,4 +47,16 @@ class OfflineHelper {
             try? resetCaches()
         }
     }
+
+    /// Clears EeveeSpotify preferences plus cached tweak data, while keeping
+    /// Spotify's own state intact. Recovery action for stale settings/caches
+    /// left behind by older tweak versions.
+    static func resetTweakSettings(clearCaches: Bool = true) {
+        UserDefaults.resetEeveeSettings()
+        try? resetPersistentCache()
+        try? resetRemoteConfig()
+        if clearCaches {
+            try? resetCaches()
+        }
+    }
 }

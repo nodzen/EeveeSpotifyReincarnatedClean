@@ -86,6 +86,20 @@ struct EeveeUISettingsView: View {
                 )
             }
             
+            if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26 {
+                Section(
+                    footer: Text("disable_liquid_glass_description".localized)
+                ) {
+                    Toggle(
+                        "disable_liquid_glass".localized,
+                        isOn: Binding<Bool>(
+                            get: { UserDefaults.disableLiquidGlass },
+                            set: { UserDefaults.disableLiquidGlass = $0 }
+                        )
+                    )
+                }
+            }
+
             SpacerView()
         }
         

@@ -78,6 +78,8 @@ static_color = "Статический цвет";
 
 color_normalization_factor = "Уровень нормализации цвета";
 dark_popups = "Темные сообщения";
+disable_liquid_glass = "Убрать Liquid Glass (частично)";
+disable_liquid_glass_description = "Убирает стекло с чипов Spotify, строки поиска и размытия шапки. Кнопки навигации остаются стеклянными. Нужен перезапуск приложения.";
 hide_lyrics_under_cover_art = "Не показывать текст под обложкой";
 hide_lyrics_under_cover_art_description = "Если включено, текст под обложкой не показывается, а нажатие на обложку открывает её. Если выключено, Spotify показывает текст в обычном режиме с кнопкой скрытия. После изменения перезапустите Spotify.";
 amoled_theme = "Черная тема AMOLED";

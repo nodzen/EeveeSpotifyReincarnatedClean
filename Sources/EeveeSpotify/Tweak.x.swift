@@ -492,7 +492,8 @@ struct EeveeSpotify: Tweak {
             UniversalSettingsIntegrationNavGroup().activate()
 
         } else {
-            writeDebugLog("[INIT] Skipped settings integration (ProfileSettingsSection API mismatch)")
+            // ProfileSettingsSection is unavailable on this 9.1.x build; settings
+            // integration happens via the SettingsListViewController path below.
         }
 
         // 9.1.44 path — ProfileSettingsSection gone, new SettingsListViewController owns Settings root.

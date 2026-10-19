@@ -181,6 +181,30 @@ struct EeveeSettingsView: View {
                     }
                     .foregroundColor(.red)
                 }
+
+                Button {
+                    confirmDestructive(
+                        title: "Reset Tweak Settings",
+                        message: "Clears EeveeSpotify preferences and cached data, then restarts the app. Spotify login is not affected.",
+                        confirmTitle: "Reset Tweak Settings"
+                    ) {
+                        isClearingData = true
+
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            OfflineHelper.resetTweakSettings(clearCaches: true)
+
+                            DispatchQueue.main.async {
+                                exitApplication()
+                            }
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "arrow.counterclockwise.circle.fill")
+                        Text("Reset Tweak Settings")
+                    }
+                    .foregroundColor(.red)
+                }
             }
             .onChange(of: debugLoggingEnabled) { enabled in
                 UserDefaults.debugLoggingEnabled = enabled
