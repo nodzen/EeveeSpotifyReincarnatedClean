@@ -318,3 +318,17 @@ categoriesSectionTitle1 = "Per-category actions";
 categoriesSectionDeps1 = "Off = ignore. Show = draw on the bar only. Manual = prompt before skipping. Auto = skip silently.";
 block_rating_prompts = "Block Rating Prompts";
 block_rating_prompts_description = "Suppresses the in-app App Store rating prompt. Restart Spotify after changing.";
+
+audio_recording = "Audio Recording";
+record_button = "Show Record Button";
+recording_storage_description = "Recordings are saved in Spotify's Documents/Recordings folder. The record button appears on the Now Playing screen. Restart Spotify after changing this toggle.";
+recorder_unavailable_description = "Recording needs inline hooking (jailbreak with Substrate, or a JIT-enabled launch). This process does not expose it, so the recorder is disabled.";
+start_recording = "Start Recording";
+stop_recording = "Stop Recording";
+playback_controls = "Playback Controls";
+playback_controls_description = "Controls Spotify's own player. Open the Now Playing screen once after launch so the controller is captured.";
+previous_track = "Previous Track";
+play_pause = "Play/Pause";
+next_track = "Next Track";
+shuffle = "Shuffle";
+repeat = "Repeat";

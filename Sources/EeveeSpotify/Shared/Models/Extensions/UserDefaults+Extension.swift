@@ -195,6 +195,10 @@ extension UserDefaults {
         for key in eeveeKeys {
             container.removeObject(forKey: key)
         }
+        // Recorder preferences live under "EVRec." and are owned by the ObjC side.
+        for key in container.dictionaryRepresentation().keys where key.hasPrefix("EVRec.") {
+            container.removeObject(forKey: key)
+        }
         UserDefaults.standard.removeObject(forKey: "com.apple.SwiftUI.DisableSolarium")
     }
 }

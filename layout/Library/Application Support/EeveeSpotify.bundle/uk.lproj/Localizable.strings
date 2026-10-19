@@ -138,3 +138,17 @@ play_songs_in_any_order = "Слухайте треки в будь-якому п
 organize_listening_queue = "Керування чергою прослуховування";
 
 payment_notice = "EeveeSpotify застосовує патчі, щоб розблокувати деякі функції Premium. Це безкоштовно.";
+
+audio_recording = "Запис звуку";
+record_button = "Показувати кнопку запису";
+recording_storage_description = "Записи зберігаються в теці Documents/Recordings усередині Spotify. Кнопка запису з'являється на екрані «Зараз грає». Після зміни перемикача перезапустіть Spotify.";
+recorder_unavailable_description = "Для запису потрібен inline-хук (джейлбрейк із Substrate або запуск із JIT). У цьому процесі він недоступний, тому запис вимкнено.";
+start_recording = "Почати запис";
+stop_recording = "Зупинити запис";
+playback_controls = "Керування відтворенням";
+playback_controls_description = "Керує власним плеєром Spotify. Після запуску один раз відкрийте екран «Зараз грає», щоб контролер було захоплено.";
+previous_track = "Попередній трек";
+play_pause = "Пауза";
+next_track = "Наступний трек";
+shuffle = "Перемішати";
+repeat = "Повтор";

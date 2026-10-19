@@ -2,6 +2,15 @@ import Foundation
 import SwiftUI
 import EeveeSpotifyC
 
+private let tweakAnchor: @convention(c) () -> Void = {}
+
+private func tweakDirectory() -> String? {
+    var info = Dl_info()
+    let pointer = unsafeBitCast(tweakAnchor, to: UnsafeRawPointer.self)
+    guard dladdr(pointer, &info) != 0, let name = info.dli_fname else { return nil }
+    return (String(cString: name) as NSString).deletingLastPathComponent
+}
+
 class BundleHelper {
     private let bundleName = "EeveeSpotify"
     
@@ -17,7 +26,13 @@ class BundleHelper {
            let b = Bundle(path: path) {
             self.bundle = b
             NSLog("[EeveeSpotify] Loaded bundle from main bundle: \(path)")
-        } 
+        }
+        // Injected builds keep the bundle next to the tweak dylib.
+        else if let directory = tweakDirectory(),
+                let b = Bundle(path: directory + "/\(bundleName).bundle") {
+            self.bundle = b
+            NSLog("[EeveeSpotify] Loaded bundle next to dylib: \(directory)")
+        }
         // If not found, try locating in file system (jailbreak path)
         else {
             let jbPath = EeveeJBRootPath("/Library/Application Support/\(bundleName).bundle")

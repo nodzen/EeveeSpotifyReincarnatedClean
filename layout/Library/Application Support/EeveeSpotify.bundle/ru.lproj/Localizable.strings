@@ -170,3 +170,17 @@ no_debug_log_found_ok = "ОК";
 debug_section_footer = "Включите запись, воспроизведите проблему и экспортируйте лог.";
 block_rating_prompts = "Блокировать запрос оценки";
 block_rating_prompts_description = "Подавляет внутриигровой запрос оценить приложение в App Store. После изменения перезапустите Spotify.";
+
+audio_recording = "Запись звука";
+record_button = "Показывать кнопку записи";
+recording_storage_description = "Записи сохраняются в папке Documents/Recordings внутри Spotify. Кнопка записи появляется на экране «Сейчас играет». После изменения переключателя перезапустите Spotify.";
+recorder_unavailable_description = "Для записи нужен inline-хук (джейлбрейк с Substrate или запуск с JIT). В этом процессе он недоступен, поэтому запись отключена.";
+start_recording = "Начать запись";
+stop_recording = "Остановить запись";
+playback_controls = "Управление воспроизведением";
+playback_controls_description = "Управляет собственным плеером Spotify. После запуска один раз откройте экран «Сейчас играет», чтобы контроллер был захвачен.";
+previous_track = "Предыдущий трек";
+play_pause = "Пауза";
+next_track = "Следующий трек";
+shuffle = "Перемешать";
+repeat = "Повтор";

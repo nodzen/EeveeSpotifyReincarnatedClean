@@ -1,4 +1,6 @@
 #import <Foundation/Foundation.h>
+#import "EVPlayback.h"
+#import "EVRecorder.h"
 
 NS_ASSUME_NONNULL_BEGIN
 

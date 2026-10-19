@@ -23,6 +23,8 @@ EeveeSpotify_FILES = $(shell find Sources/EeveeSpotify -name '*.swift') $(shell 
 EeveeSpotify_SWIFTFLAGS = -ISources/EeveeSpotifyC/include -Osize
 EeveeSpotify_EXTRA_FRAMEWORKS = EeveeSwiftProtobuf
 EeveeSpotify_CFLAGS = -fobjc-arc -ISources/EeveeSpotifyC/include -Os
+# Audio capture (recorder) and its metadata/export pipeline.
+EeveeSpotify_FRAMEWORKS = AudioToolbox AVFoundation MediaPlayer QuartzCore CoreMedia UIKit
 
 # Normal packages are release-like and omit diagnostics. Build a separate
 # diagnostic variant with: EEVEE_DEBUG=1 make package ...
