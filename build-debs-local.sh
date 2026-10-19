@@ -122,15 +122,6 @@ done
 THEOS_ROOTLESS="${THEOS_ROOTLESS:-$HOME/theos}"
 THEOS_ROOTHIDE="${THEOS_ROOTHIDE:-$HOME/theos-roothide}"
 
-test_swift_file() {
-    local source_file="$1"
-    local test_file="$2"
-    local output_file="$TMP_DIR/$(basename "$test_file" .swift)-test"
-
-    swiftc "$source_file" "$test_file" -o "$output_file"
-    "$output_file"
-}
-
 run_tests() {
     [ "$RUN_TESTS" -eq 1 ] || {
         warn "Skipping focused Swift tests (--skip-tests)."
@@ -138,20 +129,7 @@ run_tests() {
     }
 
     say "Running focused Swift tests"
-    test_swift_file Sources/EeveeSpotify/Premium/Helpers/BrowsitaSectionStripper.swift Tests/BrowsitaSectionStripper/main.swift
-    test_swift_file Sources/EeveeSpotify/Lyrics/ScrollsitaLyricsCardPatcher.swift Tests/ScrollsitaLyricsCardPatcher/main.swift
-    test_swift_file Sources/EeveeSpotify/Shared/Models/Extensions/URL+Extension.swift Tests/URLAdClassification/main.swift
-    test_swift_file Sources/EeveeSpotify/Premium/Helpers/ServerSidedFeaturePolicy.swift Tests/ServerSidedFeaturePolicy/main.swift
-    test_swift_file Sources/EeveeSpotify/Premium/Helpers/BundledConfigurationPolicy.swift Tests/BundledConfigurationPolicy/main.swift
-    test_swift_file Sources/EeveeSpotify/Shared/Helpers/SyntheticLyricsTaskTracker.swift Tests/SyntheticLyricsTaskTracker/main.swift
-    test_swift_file Sources/EeveeSpotify/Shared/Helpers/LyricsResponseGate.swift Tests/LyricsResponseGate/main.swift
-    swiftc Sources/EeveeSpotify/Lyrics/Models/LyricsDto.swift \
-        Sources/EeveeSpotify/Lyrics/Models/LyricsLineDto.swift \
-        Sources/EeveeSpotify/Lyrics/Models/LyricsTranslationDto.swift \
-        Sources/EeveeSpotify/Lyrics/Models/LyricsRomanizationStatus.swift \
-        Tests/LyricsDto/main.swift -o "$TMP_DIR/lyrics-dto-test"
-    "$TMP_DIR/lyrics-dto-test"
-    python3 Tests/ResolveConfigurationSnapshot/test.py
+    "$REPO_DIR/Tests/run.sh"
 }
 
 validate_deb() {

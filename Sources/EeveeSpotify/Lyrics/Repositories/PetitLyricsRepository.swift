@@ -24,6 +24,9 @@ class PetitLyricsRepository: LyricsRepository {
         
         request.httpMethod = "POST"
         request.httpBody = finalData.queryString.data(using: .utf8)
+        // The loader waits on this semaphore; bound the request so a dead
+        // connection does not pin the background fetch thread.
+        request.timeoutInterval = 8
 
         let semaphore = DispatchSemaphore(value: 0)
         var data: Data?

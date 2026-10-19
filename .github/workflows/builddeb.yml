@@ -66,52 +66,8 @@ jobs:
       - name: Build EeveeSwiftProtobuf.framework
         run: make build-eeveeswiftprotobuf
 
-      - name: Test ad and Premium banner filtering
-        run: |
-          swiftc \
-            Sources/EeveeSpotify/Premium/Helpers/BrowsitaSectionStripper.swift \
-            Tests/BrowsitaSectionStripper/main.swift \
-            -o "$RUNNER_TEMP/browsita-section-stripper-tests"
-          "$RUNNER_TEMP/browsita-section-stripper-tests"
-          swiftc \
-            Sources/EeveeSpotify/Shared/Models/Extensions/URL+Extension.swift \
-            Tests/URLAdClassification/main.swift \
-            -o "$RUNNER_TEMP/url-ad-classification-tests"
-          "$RUNNER_TEMP/url-ad-classification-tests"
-          swiftc \
-            Sources/EeveeSpotify/Premium/Helpers/ServerSidedFeaturePolicy.swift \
-            Tests/ServerSidedFeaturePolicy/main.swift \
-            -o "$RUNNER_TEMP/server-sided-feature-policy-tests"
-          "$RUNNER_TEMP/server-sided-feature-policy-tests"
-          swiftc \
-            Sources/EeveeSpotify/Premium/Helpers/BundledConfigurationPolicy.swift \
-            Tests/BundledConfigurationPolicy/main.swift \
-            -o "$RUNNER_TEMP/bundled-configuration-policy-tests"
-          "$RUNNER_TEMP/bundled-configuration-policy-tests"
-          swiftc \
-            Sources/EeveeSpotify/Shared/Helpers/SyntheticLyricsTaskTracker.swift \
-            Tests/SyntheticLyricsTaskTracker/main.swift \
-            -o "$RUNNER_TEMP/synthetic-lyrics-task-tracker-tests"
-          "$RUNNER_TEMP/synthetic-lyrics-task-tracker-tests"
-          swiftc \
-            Sources/EeveeSpotify/Lyrics/ScrollsitaLyricsCardPatcher.swift \
-            Tests/ScrollsitaLyricsCardPatcher/main.swift \
-            -o "$RUNNER_TEMP/scrollsita-lyrics-card-patcher-tests"
-          "$RUNNER_TEMP/scrollsita-lyrics-card-patcher-tests"
-          swiftc \
-            Sources/EeveeSpotify/Shared/Helpers/LyricsResponseGate.swift \
-            Tests/LyricsResponseGate/main.swift \
-            -o "$RUNNER_TEMP/lyrics-response-gate-tests"
-          "$RUNNER_TEMP/lyrics-response-gate-tests"
-          swiftc \
-            Sources/EeveeSpotify/Lyrics/Models/LyricsDto.swift \
-            Sources/EeveeSpotify/Lyrics/Models/LyricsLineDto.swift \
-            Sources/EeveeSpotify/Lyrics/Models/LyricsTranslationDto.swift \
-            Sources/EeveeSpotify/Lyrics/Models/LyricsRomanizationStatus.swift \
-            Tests/LyricsDto/main.swift \
-            -o "$RUNNER_TEMP/lyrics-dto-tests"
-          "$RUNNER_TEMP/lyrics-dto-tests"
-          python3 Tests/ResolveConfigurationSnapshot/test.py
+      - name: Run focused tests
+        run: ./Tests/run.sh
 
       - name: Build ${{ matrix.label }} .deb
         env:

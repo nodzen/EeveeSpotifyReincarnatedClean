@@ -48,7 +48,10 @@ class MusixmatchLyricsRepository: LyricsRepository {
         stringUrl += "?\(queryString)"
 
         guard let url = URL(string: stringUrl) else { throw LyricsError.decodingError }
-        let request = URLRequest(url: url)
+        var request = URLRequest(url: url)
+        // The loader waits on this semaphore; without a timeout a dead
+        // connection pins the background fetch thread for a minute.
+        request.timeoutInterval = 8
 
         let semaphore = DispatchSemaphore(value: 0)
         var data: Data?

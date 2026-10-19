@@ -13,7 +13,10 @@ struct AnonymousTokenHelper {
         var responseData: Data?
         var responseError: Error?
 
-        let task = URLSession.shared.dataTask(with: URLRequest(url: url)) { data, _, error in
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+
+        let task = URLSession.shared.dataTask(with: request) { data, _, error in
             responseData = data
             responseError = error
             semaphore.signal()
