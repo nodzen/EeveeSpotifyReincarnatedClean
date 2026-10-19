@@ -6,7 +6,7 @@ on:
       tag:
         description: "Git tag to create/use for the draft release (e.g. v6.6.9)"
         required: true
-        default: "v6.7.3"
+        default: "v6.7.5"
       release_name:
         description: "Release title (optional)"
         required: false
