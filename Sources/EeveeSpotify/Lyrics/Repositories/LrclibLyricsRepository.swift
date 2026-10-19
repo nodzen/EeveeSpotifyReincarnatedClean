@@ -9,7 +9,7 @@ class LrclibLyricsRepository: LyricsRepository {
         
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpAdditionalHeaders = [
-            "User-Agent": "EeveeSpotify v\(EeveeSpotify.version) https://github.com/whoeevee/EeveeSpotify"
+            "User-Agent": "EeveeSpotify v\(EeveeSpotify.version) https://github.com/\(EeveeSpotify.repoSlug)"
         ]
         // LRCLIB is unreachable on some networks (including the user's
         // Russian route) and otherwise holds the Spotify lyrics response for
@@ -47,7 +47,7 @@ class LrclibLyricsRepository: LyricsRepository {
         var request = URLRequest(url: url)
 
         request.setValue(
-            "EeveeSpotify v\(EeveeSpotify.version) https://github.com/whoeevee/EeveeSpotify",
+            "EeveeSpotify v\(EeveeSpotify.version) https://github.com/\(EeveeSpotify.repoSlug)",
             forHTTPHeaderField: "User-Agent"
         )
 

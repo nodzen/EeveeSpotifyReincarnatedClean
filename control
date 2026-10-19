@@ -4,6 +4,6 @@ Version: 6.7.3
 Architecture: iphoneos-arm
 Description: A tweak to get Spotify Premium for free, just like Spotilife
 Maintainer: Nodzen <161954767+nodzen@users.noreply.github.com>
-Author: Eevee (original), jaydenjcpy (project developer)
+Author: Eevee (original), Nodzen (maintainer)
 Section: Tweaks
 Depends: ${ORION}, firmware (>= 14.0)
