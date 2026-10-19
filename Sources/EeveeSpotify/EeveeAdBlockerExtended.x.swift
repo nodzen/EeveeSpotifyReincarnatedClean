@@ -67,7 +67,7 @@ func findTweakClass(_ name: String) -> AnyClass? {
     for i in 0..<Int(n) {
         let raw = UnsafeRawPointer(buf).load(fromByteOffset: i * MemoryLayout<UnsafeRawPointer>.size,
                                               as: UnsafeRawPointer.self)
-        let cls = unsafeBitCast(raw, to: AnyClass.self)
+        let cls: AnyClass = unsafeBitCast(raw, to: AnyClass.self)
         classListByNameCache[String(cString: class_getName(cls))] = cls
     }
     classListByNameCacheBuilt = true

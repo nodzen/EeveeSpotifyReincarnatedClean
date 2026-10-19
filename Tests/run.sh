@@ -9,6 +9,22 @@ cd "$REPO_DIR"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/eevee-tests.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+# control is the source of truth for the version; the two places that still
+# carry it by hand must not drift away from it.
+CONTROL_VERSION="$(sed -n 's/^Version:[[:space:]]*//p' control)"
+if [ -z "$CONTROL_VERSION" ]; then
+    echo "FAIL: control has no Version: line" >&2
+    exit 1
+fi
+if ! grep -Fq "**Release:** \`$CONTROL_VERSION\`" README.md; then
+    echo "FAIL: README release badge does not say $CONTROL_VERSION" >&2
+    exit 1
+fi
+if ! grep -Fq "default: \"v$CONTROL_VERSION\"" .github/workflows/builddeb.yml; then
+    echo "FAIL: builddeb.yml tag default is not v$CONTROL_VERSION" >&2
+    exit 1
+fi
+
 compile_and_run() {
     local name="$1"
     shift

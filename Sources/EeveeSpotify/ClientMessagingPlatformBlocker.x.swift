@@ -165,8 +165,8 @@ func activateClientMessagingPlatformBlocker() {
         }
     }
 
-    let viewWillAppearSelector = Selector(("viewWillAppear:"))
-    let didMoveToSuperviewSelector = Selector(("didMoveToSuperview"))
+    let viewWillAppearSelector = NSSelectorFromString("viewWillAppear:")
+    let didMoveToSuperviewSelector = NSSelectorFromString("didMoveToSuperview")
 
     let containerHooks: [(String, String, () -> Void)] = [
         (CMPFullscreenContainerHook.targetName, "FullscreenContainer", { CMPFullscreenContainerGroup().activate() }),

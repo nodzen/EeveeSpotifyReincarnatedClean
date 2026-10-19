@@ -2,9 +2,9 @@ On this page, you'll find a detailed FAQ covering various topics related to Eeve
 
 # Versions and Support
 
-EeveeSpotify currently supports Spotify version **9.1.68** (the latest version compatible with iOS 16.1+). 
+EeveeSpotify supports Spotify **9.1.x** (tested on 9.1.90). The pinned `8.9.8` (iOS 14) and `9.0.48` (iOS 15) builds are also supported.
 
-If you are jailbroken, install the latest .deb from the [releases page](https://github.com/jaydenjcpy/EeveeSpotifyReincarnated/releases), along with the latest Spotify from the App Store. After installation, open the EeveeSpotify settings (accessible from your Spotify profile settings) and reset data so it will properly patch Premium features.
+If you are jailbroken, install the latest .deb from the [releases page](https://github.com/nodzen/EeveeSpotifyReincarnatedClean/releases), along with the latest Spotify from the App Store. After installation, open the EeveeSpotify settings (accessible from your Spotify profile settings) and reset data so it will properly patch Premium features.
 
 For non-jailbroken devices, use the patched IPA files available in the releases. You can install these using:
 - **TrollStore** (recommended for iOS 14-16.6.1, 17.0)
@@ -14,7 +14,7 @@ For non-jailbroken devices, use the patched IPA files available in the releases.
 
 EeveeSpotify only supports iOS and iPadOS and is not planned to be supported on other platforms. You can sideload the iPadOS version on an Apple Silicon Mac, though.
 
-New versions are released when compatible Spotify updates become available. Check the [releases page](https://github.com/jaydenjcpy/EeveeSpotifyReincarnated/releases) for the latest builds, or join the [Telegram channel](https://t.me/compiledipas) for IPA downloads and updates.
+New versions are released when compatible Spotify updates become available. Check the [releases page](https://github.com/nodzen/EeveeSpotifyReincarnatedClean/releases) for the latest builds, or join the [Telegram channel](https://t.me/ESRClean) for IPA downloads and updates.
 
 ## CarPlay, Siri and Dynamic Island/Lockscreen
 
@@ -47,6 +47,8 @@ If you're unable to sign in and see an error, try these solutions:
 2. Reinstall the app
 3. Check your internet connection
 4. If using a VPN, try disconnecting/reconnecting
+
+See [something-went-wrong.md](something-went-wrong.md) for the reCAPTCHA/App Attest explanation and the Apple/Google login workaround.
 
 ## Lyrics Not Showing Up
 

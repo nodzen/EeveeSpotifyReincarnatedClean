@@ -72,7 +72,7 @@ struct EeveeSettingsVersionView: View {
         
         .onAppear {
             Task {
-                try await loadVersion()
+                try? await loadVersion()
             }
         }
     }

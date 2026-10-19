@@ -4,7 +4,7 @@ import UIKit
 class ImageViewModel: ObservableObject {
     @Published var image: UIImage?
 
-    private var imageCache: NSCache<NSString, UIImage>?
+    private let imageCache = NSCache<NSString, UIImage>()
 
     init(urlString: String?) {
         loadImage(urlString: urlString)
@@ -24,7 +24,7 @@ class ImageViewModel: ObservableObject {
     private func loadImageFromURL(urlString: String) {
         guard let url = URL(string: urlString) else { return }
 
-        URLSession.shared.dataTask(with: url) { data, response, error in
+        URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
             guard error == nil else {
                 return
             }
@@ -33,7 +33,7 @@ class ImageViewModel: ObservableObject {
                 return
             }
 
-            DispatchQueue.main.async { [weak self] in
+            DispatchQueue.main.async {
                 guard let loadedImage = UIImage(data: data) else { return }
                 self?.image = loadedImage
                 self?.setImageCache(image: loadedImage, key: urlString)
@@ -42,10 +42,10 @@ class ImageViewModel: ObservableObject {
     }
 
     private func setImageCache(image: UIImage, key: String) {
-        imageCache?.setObject(image, forKey: key as NSString)
+        imageCache.setObject(image, forKey: key as NSString)
     }
 
     private func getImageFromCache(from key: String) -> UIImage? {
-        return imageCache?.object(forKey: key as NSString) as? UIImage
+        return imageCache.object(forKey: key as NSString)
     }
 }
