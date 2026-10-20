@@ -9,28 +9,11 @@ struct EeveeMiscellaneousSettingsView: View {
     @State private var recorderStatus: String = EeveeRecorderStatusLine() ?? ""
     @State private var recorderAvailable: Bool = EeveeAudioRecorderSupported()
     @State private var showRecordButton: Bool = EeveeRecorderShowButton()
-    @State private var playbackAvailable: Bool = EeveePlaybackAvailable()
-    @State private var downloadPending: Bool = false
+    @State private var saveArtwork: Bool = EeveeRecorderSaveArtwork()
 
     private func refreshRecorder() {
         isRecording = EeveeAudioRecorderIsRecording()
         recorderStatus = EeveeRecorderStatusLine() ?? ""
-        playbackAvailable = EeveePlaybackAvailable()
-    }
-
-    private func playbackButton(
-        _ systemImage: String,
-        _ label: String,
-        _ action: @escaping () -> Bool
-    ) -> some View {
-        Button {
-            _ = action()
-            refreshRecorder()
-        } label: {
-            Image(systemName: systemImage)
-                .font(.system(size: 18, weight: .semibold))
-        }
-        .accessibilityLabel(Text(label.localized))
     }
 
     var body: some View {
@@ -96,39 +79,21 @@ struct EeveeMiscellaneousSettingsView: View {
                 }
                 .disabled(!recorderAvailable)
 
-                Button {
-                    downloadPending = true
-                    if !EeveeAudioRecorderDownloadCurrentTrack() {
-                        downloadPending = false
-                        refreshRecorder()
-                    }
-                } label: {
-                    HStack {
-                        Image(systemName: "arrow.down.circle")
-                        Text("download_current_track".localized)
-                    }
-                }
-                .disabled(!recorderAvailable || isRecording || downloadPending)
+                Toggle(
+                    "save_artwork".localized,
+                    isOn: Binding<Bool>(
+                        get: { saveArtwork },
+                        set: {
+                            saveArtwork = $0
+                            EeveeRecorderSetSaveArtwork($0)
+                        }
+                    )
+                )
+                .disabled(!recorderAvailable)
 
                 Text(recorderStatus)
                     .font(.footnote)
                     .foregroundColor(.secondary)
-            }
-
-            Section(
-                header: Text("playback_controls".localized),
-                footer: Text("playback_controls_description".localized)
-            ) {
-                HStack(spacing: 28) {
-                    playbackButton("backward.fill", "previous_track", EeveePlaybackPrevious)
-                    playbackButton("playpause.fill", "play_pause", EeveePlaybackTogglePause)
-                    playbackButton("forward.fill", "next_track", EeveePlaybackNext)
-                    playbackButton("shuffle", "shuffle", EeveePlaybackToggleShuffle)
-                    playbackButton("repeat", "repeat", EeveePlaybackToggleRepeat)
-                }
-                .frame(maxWidth: .infinity)
-                .opacity(playbackAvailable ? 1 : 0.4)
-                .disabled(!playbackAvailable)
             }
 
             Section(footer: Text("livecontainer_sharing_description".localized)) {
@@ -160,12 +125,10 @@ struct EeveeMiscellaneousSettingsView: View {
         }
         .onReceive(NotificationCenter.default.publisher(
             for: .EeveeRecorderStateDidChange)) { _ in
-            downloadPending = false
             refreshRecorder()
         }
         .onReceive(NotificationCenter.default.publisher(
             for: .EeveeRecorderDidFinish)) { _ in
-            downloadPending = false
             refreshRecorder()
         }
         .onChange(of: blockSpotifyAnalytics) { enabled in

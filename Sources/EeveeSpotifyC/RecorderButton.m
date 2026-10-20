@@ -2,6 +2,7 @@
 
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
+#import <objc/runtime.h>
 #import <math.h>
 #import "EVRecorderInternal.h"
 
@@ -175,6 +176,10 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 @property (nonatomic, assign) EVRecState state;
 @property (nonatomic, assign) NSUInteger token, toastToken;
 @property (nonatomic, assign) BOOL floating;
+@property (nonatomic, assign) BOOL recordVisible;
+@property (nonatomic, assign) BOOL downloadPending;
+@property (nonatomic, assign) BOOL started;
+@property (nonatomic, weak) UIButton *playerDownloadButton;
 @property (nonatomic, assign) NSTimeInterval anchorMissingSince;
 @property (nonatomic, assign) NSUInteger candidateCount;
 @property (nonatomic, copy) NSString *hostDesc;
@@ -185,6 +190,9 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 @property (nonatomic, copy) NSString *toastSummary;
 + (instancetype)shared;
 - (void)start;
+- (void)setRecordVisible:(BOOL)visible;
+- (void)tapDownload;
+- (void)refreshDownloadButton;
 - (void)nextAnchor;
 - (void)dumpLottieToLog;
 - (void)shareURLs:(NSArray<NSURL *> *)urls;
@@ -203,6 +211,9 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 }
 
 - (void)start {
+    if (self.started) return;
+    self.started = YES;
+    _recordVisible = EeveeRecorderShowButton();
     self.button = [[EVRecButton alloc] initWithFrame:CGRectMake(0, 0, 74.6667, 74.6667)];
     [self.button addTarget:self action:@selector(tap) forControlEvents:UIControlEventTouchUpInside];
     UILongPressGestureRecognizer *lp = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(longPressButton:)];
@@ -224,6 +235,19 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
     [self scanTick];
 }
 
+- (void)setRecordVisible:(BOOL)visible {
+    _recordVisible = visible;
+    if (!visible) {
+        [self.button removeFromSuperview];
+        self.anchor = nil;
+        [self hideFloating];
+        EVI("UI", @"record button hidden");
+    } else {
+        EVI("UI", @"record button shown");
+        [self scanTick];
+    }
+}
+
 #pragma mark app state
 
 - (void)appActive { EVLogSetAppState(0); EVI("UI", @"app active"); [self scanTick]; [self reconcile]; }
@@ -241,6 +265,7 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 #pragma mark anchoring
 
 - (void)scanTick {
+    if (!self.recordVisible || !self.button) return;
     if (UIApplication.sharedApplication.applicationState == UIApplicationStateBackground) return;
     UIView *a = self.anchor;
     if (a && (!a.window || a.isHidden)) { [self.button removeFromSuperview]; self.anchor = nil; a = nil; }
@@ -271,7 +296,7 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 
 - (void)placeAboveAnchor {
     UIView *A = self.anchor, *sv = A.superview;
-    if (!sv) return;
+    if (!sv || !self.button) return;
     CGRect fr = A.frame;
     CGRect options[2] = {CGRectOffset(fr, 0, -fr.size.height), CGRectOffset(fr, 0, fr.size.height)};
     NSString *names[2] = {@"above", @"below"};
@@ -362,6 +387,7 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
         NSString *err = EeveeAudioRecorderLastError();
         if (err.length) [self showToastTitle:@"Recording stopped" sub:err image:nil duration:10];
     }
+    [self refreshDownloadButton];
 }
 
 - (void)tap {
@@ -411,11 +437,46 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
     if (g.state == UIGestureRecognizerStateBegan) EeveeRecorderPresentDebugPanel();
 }
 
+#pragma mark player download button
+
+- (void)refreshDownloadButton {
+    BOOL busy = self.downloadPending || EeveeAudioRecorderIsRecording();
+    self.playerDownloadButton.enabled = !busy;
+    self.playerDownloadButton.alpha = busy ? 0.4 : 1.0;
+}
+
+- (void)tapDownload {
+    if (self.downloadPending || EeveeAudioRecorderIsRecording()) {
+        [self showToastTitle:@"Busy" sub:@"Wait for the current recording/download to finish." image:nil duration:4];
+        return;
+    }
+    self.downloadPending = YES;
+    [self refreshDownloadButton];
+    if (!EeveeAudioRecorderDownloadCurrentTrack()) {
+        self.downloadPending = NO;
+        [self refreshDownloadButton];
+        NSString *err = EeveeAudioRecorderLastError() ?: @"Could not start the download.";
+        [self showToastTitle:@"Download failed" sub:err image:nil duration:10];
+        return;
+    }
+    [self showToastTitle:@"Downloading track" sub:@"Restarting the track. The M4A will be saved to Documents." image:nil duration:5];
+    // If starting fails asynchronously (tap unavailable), the state
+    // notification never arrives; release the button after a short grace.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (self.downloadPending && !EeveeAudioRecorderIsRecording()) {
+            self.downloadPending = NO;
+            [self refreshDownloadButton];
+        }
+    });
+}
+
 - (void)finished:(NSNotification *)n {
     NSArray<NSURL *> *files = n.userInfo[@"files"];
     NSArray<NSDictionary *> *tracks = n.userInfo[@"tracks"];
     NSString *err = n.userInfo[@"error"];
     id folder = n.userInfo[@"folder"];
+    BOOL download = [n.userInfo[@"download"] boolValue];
+    self.downloadPending = NO;
     if ([folder isKindOfClass:NSURL.class]) self.lastFolder = folder;
     NSMutableArray *share = [NSMutableArray array];
     UIImage *thumb = nil;
@@ -433,10 +494,20 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
     if (!tracks.count) {
         [self showToastTitle:@"Recording failed" sub:err.length ? err : @"Nothing was saved." image:nil duration:12];
     } else {
-        NSString *sub = [NSString stringWithFormat:@"Documents/Recordings/%@%@\nTap to share - hold to copy", folderName, err.length ? [@"\nWarning: " stringByAppendingString:err] : @""];
-        [self showToastTitle:[NSString stringWithFormat:@"Saved %lu track%@", (unsigned long)tracks.count, tracks.count == 1 ? @"" : @"s"]
+        NSString *where;
+        if (download) {
+            NSURL *m4a = nil;
+            for (NSURL *u in share) if ([u.pathExtension.lowercaseString isEqualToString:@"m4a"]) { m4a = u; break; }
+            where = m4a ? [NSString stringWithFormat:@"Documents/%@", m4a.lastPathComponent]
+                        : [NSString stringWithFormat:@"Documents/Recordings/%@", folderName];
+        } else {
+            where = [NSString stringWithFormat:@"Documents/Recordings/%@", folderName];
+        }
+        NSString *sub = [NSString stringWithFormat:@"%@%@\nTap to share - hold to copy", where, err.length ? [@"\nWarning: " stringByAppendingString:err] : @""];
+        [self showToastTitle:download ? @"Downloaded 1 track" : [NSString stringWithFormat:@"Saved %lu track%@", (unsigned long)tracks.count, tracks.count == 1 ? @"" : @"s"]
                          sub:sub image:thumb duration:14];
     }
+    [self refreshDownloadButton];
 }
 
 #pragma mark toast / share
@@ -536,6 +607,86 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 }
 
 @end
+
+#pragma mark - download button in the Now Playing screen
+
+static char kEVPlayerDownloadButtonKey;
+
+static void evPlacePlayerDownloadButton(UIViewController *vc) {
+    UIButton *b = objc_getAssociatedObject(vc, &kEVPlayerDownloadButtonKey);
+    if (!b || !vc.isViewLoaded) return;
+    UIView *v = vc.view;
+    if (b.superview != v) [v addSubview:b];
+    [v bringSubviewToFront:b];
+    CGFloat size = 40, top = v.safeAreaInsets.top;
+    if (top <= 0) top = v.window.safeAreaInsets.top;
+    // The top-right corner belongs to Spotify's "..." menu; sit just left of it.
+    CGFloat x = v.bounds.size.width - 16 - 44 - size;
+    b.frame = CGRectMake(MAX(16, x), top + 6, size, size);
+}
+
+static void evInstallPlayerDownloadButton(UIViewController *vc) {
+    if (!vc.isViewLoaded) return;
+    UIButton *b = objc_getAssociatedObject(vc, &kEVPlayerDownloadButtonKey);
+    if (!b) {
+        b = [UIButton buttonWithType:UIButtonTypeSystem];
+        [b setImage:[UIImage systemImageNamed:@"arrow.down.to.line"] forState:UIControlStateNormal];
+        [b setPreferredSymbolConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:18 weight:UIImageSymbolWeightSemibold]
+                           forImageInState:UIControlStateNormal];
+        b.tintColor = UIColor.whiteColor;
+        b.backgroundColor = [UIColor colorWithWhite:0 alpha:0.22];
+        b.layer.cornerRadius = 20;
+        b.clipsToBounds = YES;
+        b.accessibilityLabel = @"Download current track";
+        [b addTarget:[EVRecUI shared] action:@selector(tapDownload) forControlEvents:UIControlEventTouchUpInside];
+        objc_setAssociatedObject(vc, &kEVPlayerDownloadButtonKey, b, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        EVI("UI", @"download button added to %@", NSStringFromClass(vc.class));
+    }
+    if (b.superview != vc.view) [vc.view addSubview:b];
+    [vc.view bringSubviewToFront:b];
+    [EVRecUI shared].playerDownloadButton = b;
+    [[EVRecUI shared] refreshDownloadButton];
+    evPlacePlayerDownloadButton(vc);
+}
+
+static IMP evOrigPlayerDidAppear, evOrigPlayerDidLayout;
+static BOOL evPlayerHookInstalled;
+
+static void evPlayerDidAppear(UIViewController *self, SEL _cmd, BOOL animated) {
+    if (evOrigPlayerDidAppear) ((void (*)(id, SEL, BOOL))evOrigPlayerDidAppear)(self, _cmd, animated);
+    evInstallPlayerDownloadButton(self);
+}
+
+static void evPlayerDidLayout(UIViewController *self, SEL _cmd) {
+    if (evOrigPlayerDidLayout) ((void (*)(id, SEL))evOrigPlayerDidLayout)(self, _cmd);
+    // Also covers a controller that was already on screen when the hook was
+    // installed, and re-adds the button if Spotify rebuilds its view tree.
+    evInstallPlayerDownloadButton(self);
+}
+
+static void evInstallPlayerButtonHook(int attempt) {
+    if (evPlayerHookInstalled) return;
+    Class cls = NSClassFromString(@"NowPlaying_ScrollImpl.NPVScrollViewController");
+    if (!cls) {
+        if (attempt >= 120) { EVW("UI", @"NPVScrollViewController never appeared; no player download button"); return; }
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            evInstallPlayerButtonHook(attempt + 1);
+        });
+        return;
+    }
+    Method appear = class_getInstanceMethod(cls, @selector(viewDidAppear:));
+    Method layout = class_getInstanceMethod(cls, @selector(viewDidLayoutSubviews));
+    if (!appear || !layout) {
+        EVW("UI", @"NPVScrollViewController is missing lifecycle methods; no player download button");
+        return;
+    }
+    evOrigPlayerDidAppear = method_getImplementation(appear);
+    evOrigPlayerDidLayout = method_getImplementation(layout);
+    class_replaceMethod(cls, @selector(viewDidAppear:), (IMP)evPlayerDidAppear, method_getTypeEncoding(appear));
+    class_replaceMethod(cls, @selector(viewDidLayoutSubviews), (IMP)evPlayerDidLayout, method_getTypeEncoding(layout));
+    evPlayerHookInstalled = YES;
+    EVI("UI", @"hooked NPVScrollViewController for the player download button");
+}
 
 #pragma mark - Debug panel implementation
 
@@ -684,12 +835,13 @@ BOOL EeveeRecorderShowButton(void) {
 
 void EeveeRecorderSetShowButton(BOOL show) {
     EVSetSettingBool(@"showButton", show);
+    [[EVRecUI shared] setRecordVisible:show];
 }
 
 __attribute__((constructor)) static void evUIInit(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{ evInstallPlayerButtonHook(0); });
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
         if (!EeveeAudioRecorderSupported()) return;
-        if (!EeveeRecorderShowButton()) return;
         [[EVRecUI shared] start];
     });
 }

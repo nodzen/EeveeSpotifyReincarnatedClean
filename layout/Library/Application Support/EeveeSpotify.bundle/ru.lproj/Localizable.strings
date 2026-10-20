@@ -173,15 +173,8 @@ block_rating_prompts_description = "Подавляет внутриигрово�
 
 audio_recording = "Запись звука";
 record_button = "Показывать кнопку записи";
-recording_storage_description = "Записи сохраняются в папке Documents/Recordings внутри Spotify. Кнопка записи появляется на экране «Сейчас играет». После изменения переключателя перезапустите Spotify.";
+recording_storage_description = "Записи сохраняются в Documents/Recordings. Скачанные треки сохраняются в M4A в Documents. Обложка вшивается в M4A; «Сохранять обложку отдельно» дополнительно оставит JPG. Кнопка скачивания находится на экране «Сейчас играет».";
 recorder_unavailable_description = "Для записи нужен доступ к render-callback Spotify. В этом процессе он недоступен, поэтому запись отключена.";
 start_recording = "Начать запись";
 stop_recording = "Остановить запись";
-download_current_track = "Скачать текущий трек";
-playback_controls = "Управление воспроизведением";
-playback_controls_description = "Управляет собственным плеером Spotify. После запуска один раз откройте экран «Сейчас играет», чтобы контроллер был захвачен.";
-previous_track = "Предыдущий трек";
-play_pause = "Пауза";
-next_track = "Следующий трек";
-shuffle = "Перемешать";
-repeat = "Повтор";
+save_artwork = "Сохранять обложку отдельно";

@@ -33,6 +33,8 @@ void EeveeRecorderSetShowButton(BOOL show);
 NSString *EeveeAudioRecorderLastError(void);          // why the last Start failed, nil if none
 NSString *EeveeRecorderStatusLine(void);              // short text for a settings row
 void EeveeRecorderSetExtraMetadata(NSDictionary *md); // title, artist, album, albumArtist, genre, trackNumber, discNumber, year, uri, isrc
+BOOL EeveeRecorderSaveArtwork(void);                  // keep a separate JPG next to the M4A
+void EeveeRecorderSetSaveArtwork(BOOL save);
 NSString *EeveeRecorderDebugReport(void);             // main thread only
 void EeveeRecorderPresentDebugPanel(void);            // main thread only
 

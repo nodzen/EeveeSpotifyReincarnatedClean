@@ -959,6 +959,10 @@ void EeveeAudioRecorderStop(void) {
     uint64_t total = writtenFramesTotal;
     uint32_t rate = EVCoreSampleRate();
     NSArray<EVMarker *> *snapshot; @synchronized(evSync()) { snapshot = [markers copy]; }
+    // The demuxer bitrate is already known by the time playback stops. Fill
+    // any marker that was emitted before the first bitrate callback.
+    uint32_t streamBitrate = EVStreamBitrate();
+    if (streamBitrate) for (EVMarker *m in snapshot) if (!m.info.bitrate) m.info.bitrate = streamBitrate;
     evPersistMarkers();
     atomic_store(&sessionActive, false);
     pthread_mutex_unlock(&ctlLock);
@@ -971,35 +975,53 @@ void EeveeAudioRecorderStop(void) {
         NSArray<NSDictionary *> *outTracks = tracks ?: @[];
         if (download && outTracks.count) {
             NSDictionary *t0 = outTracks.firstObject;
-            NSString *base = [t0[@"file"] stringByDeletingPathExtension];
+            BOOL saveCover = EVSaveArtworkFile();
             NSMutableArray<NSURL *> *keep = [NSMutableArray array];
-            for (NSURL *u in outFiles)
-                if (base.length && [u.lastPathComponent hasPrefix:base]) [keep addObject:u];
+            BOOL hasM4A = NO, hasWAV = NO;
+            for (NSURL *u in outFiles) {
+                NSString *ext = u.pathExtension.lowercaseString;
+                if ([ext isEqualToString:@"m4a"]) { [keep addObject:u]; hasM4A = YES; }
+                else if ([ext isEqualToString:@"jpg"] && saveCover) [keep addObject:u];
+                else if ([ext isEqualToString:@"wav"]) hasWAV = YES;
+            }
+            // The user asked for one M4A (plus an optional cover). Keep WAV
+            // only as a fallback if the AAC export failed.
+            if (!hasM4A && hasWAV) {
+                for (NSURL *u in outFiles)
+                    if ([u.pathExtension.lowercaseString isEqualToString:@"wav"]) [keep addObject:u];
+            }
             if (keep.count) outFiles = keep;
             outTracks = @[t0];
             // Spotify's IOS_DOCUMENTS local-files source looks at the app's
-            // Documents folder. Move the finished file there so the scanner
-            // sees exactly one copy (Recordings/ stays for the session data).
+            // Documents folder. Move the finished M4A (and the optional JPG)
+            // there so the scanner sees exactly one copy.
+            NSURL *docs = [[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory
+                                                                 inDomains:NSUserDomainMask].firstObject;
+            NSMutableArray<NSURL *> *adjusted = [NSMutableArray array];
             for (NSURL *u in outFiles) {
-                if (![u.pathExtension.lowercaseString isEqualToString:@"m4a"]) continue;
-                NSURL *docs = [[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory
-                                                                     inDomains:NSUserDomainMask].firstObject;
+                NSString *ext = u.pathExtension.lowercaseString;
+                if (![ext isEqualToString:@"m4a"] && !(saveCover && [ext isEqualToString:@"jpg"])) {
+                    [adjusted addObject:u];
+                    continue;
+                }
                 NSURL *dst = [docs URLByAppendingPathComponent:u.lastPathComponent];
                 [[NSFileManager defaultManager] removeItemAtURL:dst error:nil];
                 if ([[NSFileManager defaultManager] moveItemAtURL:u toURL:dst error:nil]) {
-                    NSMutableArray<NSURL *> *adjusted = [outFiles mutableCopy];
-                    [adjusted replaceObjectAtIndex:[adjusted indexOfObject:u] withObject:dst];
-                    outFiles = adjusted;
-                    outputPath = dst.path;
+                    [adjusted addObject:dst];
                     EVI("Download", @"moved to %@", dst.path);
+                } else {
+                    [adjusted addObject:u];
+                    EVW("Download", @"could not move %@ to Documents", u.lastPathComponent);
                 }
-                break;
             }
+            outFiles = adjusted;
             lastSessionSummary = [NSString stringWithFormat:@"Downloaded '%@'", t0[@"title"] ?: @"track"];
         } else {
             lastSessionSummary = [NSString stringWithFormat:@"%lu track(s) in %@", (unsigned long)outTracks.count, folder.lastPathComponent];
         }
         NSURL *first = outFiles.firstObject;
+        for (NSURL *u in outFiles)
+            if ([u.pathExtension.lowercaseString isEqualToString:@"m4a"]) { first = u; break; }
         if (first) outputPath = first.path;
         dispatch_async(dispatch_get_main_queue(), ^{
             [[NSNotificationCenter defaultCenter] postNotificationName:EeveeRecorderDidFinishNotification object:nil

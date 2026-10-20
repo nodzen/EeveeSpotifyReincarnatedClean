@@ -28,6 +28,8 @@ void EVSetSettingString(NSString *key, NSString *value);
 
 NSURL *EVRecordingsRoot(void);
 NSString *EVFormatTime(double seconds);           // m:ss.mmm
+uint32_t EVStreamBitrate(void);                   // bps of the current stream, 0 if unknown
+BOOL EVSaveArtworkFile(void);                     // keep a separate JPG next to the M4A
 
 // ---- implemented in AudioRecorder.m ----
 uint64_t EVCoreFramesCaptured(void);
@@ -47,7 +49,9 @@ NSString *EVCoreActiveSessionPath(void);
 // ---- track metadata ----
 @interface EVTrackInfo : NSObject
 @property (nonatomic, copy) NSString *key, *title, *artist, *album, *albumArtist, *genre, *uri, *isrc;
+@property (nonatomic, copy) NSString *artworkURL;
 @property (nonatomic) NSInteger trackNumber, trackCount, discNumber, year;
+@property (nonatomic) uint32_t bitrate;
 @property (nonatomic) double duration, elapsed;
 @property (nonatomic, strong) id artworkObject;      // MPMediaItemArtwork
 @property (nonatomic, strong) NSData *artworkJPEG;

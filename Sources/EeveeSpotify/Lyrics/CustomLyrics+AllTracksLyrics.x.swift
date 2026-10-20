@@ -1,18 +1,24 @@
 import Orion
 import UIKit
+import EeveeSpotifyC
 
 private var shouldOverrideLocalTrackURI = false
 
 // Spotify decides whether to create the /color-lyrics request from this
 // metadata flag. Keep the 9.1.x hook isolated from the older error-handling
 // group: that group also contains private APIs which no longer exist on 9.1.x.
+// The same metadata carries title/artist/image_url, which the recorder uses for
+// tags and cover art, so the hook is active even when lyrics are disabled.
 class SPTPlayerTrackV91LyricsAvailabilityHook: ClassHook<NSObject> {
     typealias Group = V91LyricsAvailabilityGroup
     static let targetName = "SPTPlayerTrack"
 
     func metadata() -> [String: String] {
         var meta = orig.metadata()
-        meta["has_lyrics"] = "true"
+        if UserDefaults.lyricsSource.isReplacingLyrics {
+            meta["has_lyrics"] = "true"
+        }
+        EeveeRecorderSetExtraMetadata(meta)
         return meta
     }
 }

@@ -141,15 +141,8 @@ payment_notice = "EeveeSpotify застосовує патчі, щоб розб�
 
 audio_recording = "Запис звуку";
 record_button = "Показувати кнопку запису";
-recording_storage_description = "Записи зберігаються в теці Documents/Recordings усередині Spotify. Кнопка запису з'являється на екрані «Зараз грає». Після зміни перемикача перезапустіть Spotify.";
+recording_storage_description = "Записи зберігаються в Documents/Recordings. Завантажені треки зберігаються як M4A у Documents. Обкладинка вшивається в M4A; «Зберігати обкладинку окремо» додатково залишить JPG. Кнопка завантаження — на екрані «Зараз грає».";
 recorder_unavailable_description = "Для запису потрібен доступ до render-callback Spotify. У цьому процесі він недоступний, тому запис вимкнено.";
 start_recording = "Почати запис";
 stop_recording = "Зупинити запис";
-download_current_track = "Завантажити поточний трек";
-playback_controls = "Керування відтворенням";
-playback_controls_description = "Керує власним плеєром Spotify. Після запуску один раз відкрийте екран «Зараз грає», щоб контролер було захоплено.";
-previous_track = "Попередній трек";
-play_pause = "Пауза";
-next_track = "Наступний трек";
-shuffle = "Перемішати";
-repeat = "Повтор";
+save_artwork = "Зберігати обкладинку окремо";
