@@ -10,12 +10,16 @@ extern "C" {
 // Posted on the main thread when recording starts, stops or fails.
 extern NSString *const EeveeRecorderStateDidChangeNotification;
 // Posted on the main thread when the per-track files are written.
-// userInfo: files (NSArray<NSURL*>), folder (NSURL), tracks (NSArray<NSDictionary*>), error (NSString, optional)
+// userInfo: files (NSArray<NSURL*>), folder (NSURL), tracks (NSArray<NSDictionary*>),
+//           error (NSString, optional), download (NSNumber, optional)
 extern NSString *const EeveeRecorderDidFinishNotification;
 
 // Existing API (unchanged signatures)
 BOOL EeveeAudioRecorderStart(void);
 void EeveeAudioRecorderStop(void);
+// Restarts the current track, captures exactly one track and exports it as AAC.
+// Starts asynchronously; the finish notification reports the saved file.
+BOOL EeveeAudioRecorderDownloadCurrentTrack(void);
 BOOL EeveeAudioRecorderIsRecording(void);
 NSString *EeveeAudioRecorderCurrentPath(void);
 

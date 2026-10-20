@@ -25,7 +25,7 @@
 #import <mach-o/getsect.h>
 #import <objc/runtime.h>
 #import "EVRecorderInternal.h"
-#import "fishhook.h"
+#import "include/EVPlayback.h"
 
 #if __has_include(<ptrauth.h>)
 #import <ptrauth.h>
@@ -75,6 +75,9 @@ static pthread_mutex_t ctlLock = PTHREAD_MUTEX_INITIALIZER;
 static float ring[RING_SAMPLES];
 static _Atomic(uint64_t) writeIndex, readIndex;
 static _Atomic(bool) capturing, sessionActive, formatReady, abortFlag;
+static _Atomic(bool) downloadMode;
+static _Atomic(uint64_t) downloadGeneration;
+static NSString *downloadKey;
 static _Atomic(uint32_t) sampleRate = 44100, fmtChannels, fmtBits, mismatchRate;
 static _Atomic(bool) fmtIsFloat;
 static _Atomic(uint64_t) framesCaptured, statCalls, statMatched, statCaptured, statDropped, statBadLayout;
@@ -97,9 +100,9 @@ static NSString *lastSessionSummary = @"";
 
 // Spotify does not import AudioUnitRender. It installs a render callback on an
 // AudioUnit with AudioUnitSetProperty(kAudioUnitProperty_SetRenderCallback).
-// Rebinding that one GOT entry with fishhook only writes a data pointer, so the
-// tap works without JIT/debugger. We wrap the callback, let Spotify fill the
-// buffer, then copy the float32 PCM to the existing recorder ring.
+// Patching that one GOT entry only writes a data pointer, so the tap works
+// without JIT/debugger. We wrap the callback, let Spotify fill the buffer, then
+// copy the float32 PCM to the existing recorder ring.
 
 typedef OSStatus (*AudioUnitSetPropertyFn)(AudioUnit, AudioUnitPropertyID, AudioUnitScope,
                                            AudioUnitElement, const void *, UInt32);
@@ -424,31 +427,84 @@ static OSStatus evTapSetProperty(AudioUnit unit, AudioUnitPropertyID prop, Audio
                                : kAudioUnitErr_Uninitialized;
 }
 
+// iOS 15+ binaries use chained fixups. fishhook's name walk expects classic
+// bind opcodes and can silently match nothing there, so find the GOT slot by
+// value: the address dlsym() returns is exactly what dyld wrote into it.
+static BOOL evMakeWritable(void *addr, size_t size) {
+    long pageSize = getpagesize();
+    vm_address_t page = (vm_address_t)addr & ~(vm_address_t)(pageSize - 1);
+    vm_size_t len = (vm_address_t)addr + size - page;
+    kern_return_t kr = vm_protect(mach_task_self(), page, len, FALSE,
+                                  VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+    if (kr == KERN_SUCCESS) return YES;
+    return mprotect((void *)page, len, PROT_READ | PROT_WRITE) == 0;
+}
+
+static int evPatchPointerSections(const struct mach_header_64 *hdr, intptr_t slide,
+                                  void *target, void *replacement) {
+    if (!hdr || hdr->magic != MH_MAGIC_64) return 0;
+    int patched = 0;
+    const struct load_command *cmd = (const struct load_command *)(hdr + 1);
+    for (uint32_t i = 0; i < hdr->ncmds; i++) {
+        if (cmd->cmd == LC_SEGMENT_64) {
+            const struct segment_command_64 *seg = (const void *)cmd;
+            for (uint32_t j = 0; j < seg->nsects; j++) {
+                const struct section_64 *sect = (const struct section_64 *)(seg + 1) + j;
+                uint32_t type = sect->flags & SECTION_TYPE;
+                if (type != S_NON_LAZY_SYMBOL_POINTERS && type != S_LAZY_SYMBOL_POINTERS) continue;
+                void **slots = (void **)((uintptr_t)slide + sect->addr);
+                uint32_t n = (uint32_t)(sect->size / sizeof(void *));
+                for (uint32_t k = 0; k < n; k++) {
+                    if (slots[k] != target) continue;
+                    if (!evMakeWritable(&slots[k], sizeof(void *))) {
+                        EVE("Tap", @"cannot make %s.%s writable", seg->segname, sect->sectname);
+                        continue;
+                    }
+                    slots[k] = replacement;
+                    patched++;
+                    EVI("Tap", @"patched %s.%s slot %p", seg->segname, sect->sectname, &slots[k]);
+                }
+            }
+        }
+        cmd = (const struct load_command *)((uintptr_t)cmd + cmd->cmdsize);
+    }
+    return patched;
+}
+
 static BOOL evTapInstallOnce(void) {
     pthread_mutex_lock(&tapLock);
     int state = atomic_load(&tapState);
     if (state == 1) { pthread_mutex_unlock(&tapLock); return YES; }
     if (state == 2) { pthread_mutex_unlock(&tapLock); return NO; }
 
-    struct rebinding rebind = {"AudioUnitSetProperty", (void *)evTapSetProperty, (void **)&originalSetProperty};
-    void *header = (void *)_dyld_get_image_header(0);
-    int rc = header ? rebind_symbols_image(header, _dyld_get_image_vmaddr_slide(0), &rebind, 1) : -1;
-    // The audio driver is in the main executable, but rebind other images in
-    // Spotify.app too if Apple ever moves it into a framework.
-    for (uint32_t i = 1; !originalSetProperty && i < _dyld_image_count(); i++) {
-        const char *name = _dyld_get_image_name(i);
-        if (!name || !strstr(name, "Spotify.app/")) continue;
-        rebind_symbols_image((void *)_dyld_get_image_header(i), _dyld_get_image_vmaddr_slide(i), &rebind, 1);
-        rc = 0;
+    void *target = dlsym(RTLD_DEFAULT, "AudioUnitSetProperty");
+    if (!target) {
+        @synchronized(evSync()) { tapError = @"AudioUnitSetProperty symbol not found"; }
+        atomic_store(&tapState, 2);
+        pthread_mutex_unlock(&tapLock);
+        return NO;
     }
-    if (rc != 0 || !originalSetProperty) {
+
+    // Scan every image: on a normal sideload the slot is in the main
+    // executable, while LiveContainer loads the guest app as another image
+    // (and its path does not necessarily contain "Spotify.app").
+    uint32_t count = _dyld_image_count();
+    int patched = 0;
+    for (uint32_t i = 0; i < count; i++) {
+        patched += evPatchPointerSections((const struct mach_header_64 *)_dyld_get_image_header(i),
+                                          _dyld_get_image_vmaddr_slide(i), target, (void *)evTapSetProperty);
+    }
+
+    if (patched == 0) {
         NSString *error = [NSString stringWithFormat:
-            @"AudioUnitSetProperty tap unavailable (rc=%d, original=%p)", rc, (void *)originalSetProperty];
+            @"AudioUnitSetProperty GOT slot not found (target=%p)", target];
         @synchronized(evSync()) { tapError = [error copy]; }
         atomic_store(&tapState, 2);
         pthread_mutex_unlock(&tapLock);
         return NO;
     }
+    originalSetProperty = (AudioUnitSetPropertyFn)target;
+    EVI("Tap", @"patched %d GOT slot(s) for AudioUnitSetProperty", patched);
     atomic_store(&tapState, 1);
     pthread_mutex_unlock(&tapLock);
     return YES;
@@ -551,7 +607,7 @@ static BOOL installHookOnce(void) {
     BOOL force = EVSettingBool(@"forceInline", NO);
     if (!force && evTapInstallOnce()) {
         atomic_store(&tapCaptureEnabled, true);
-        hookMode = @"callback(fishhook)";
+        hookMode = @"callback(got)";
         hookError = nil;
         atomic_store(&hookState, 1);
         setLastError(nil);
@@ -562,22 +618,25 @@ static BOOL installHookOnce(void) {
     NSString *te; @synchronized(evSync()) { te = tapError; }
     if (te.length) EVW("Hook", @"render-callback tap unavailable: %@", te);
 
-    if (installInlineHookOnce()) {
-        atomic_store(&tapCaptureEnabled, false);
-        return YES;
+    // Inline hooking is only an option when a Substrate shim is present. On a
+    // plain sideload it cannot work without JIT and its error used to hide the
+    // real (useful) tap error.
+    if (dlsym(RTLD_DEFAULT, "MSHookFunction")) {
+        if (installInlineHookOnce()) {
+            atomic_store(&tapCaptureEnabled, false);
+            return YES;
+        }
+        if (force && evTapInstallOnce()) {
+            atomic_store(&tapCaptureEnabled, true);
+            hookMode = @"callback(got)";
+            hookError = nil;
+            atomic_store(&hookState, 1);
+            setLastError(nil);
+            EVI("Hook", @"inline unavailable; using render-callback tap; no JIT required");
+            return YES;
+        }
     }
-
-    // The inline path can fail on a JIT-less sideload; the callback tap is the
-    // whole point of this build. Retry it when "force inline" was requested.
-    if (force && evTapInstallOnce()) {
-        atomic_store(&tapCaptureEnabled, true);
-        hookMode = @"callback(fishhook)";
-        hookError = nil;
-        atomic_store(&hookState, 1);
-        setLastError(nil);
-        EVI("Hook", @"inline unavailable; using render-callback tap; no JIT required");
-        return YES;
-    }
+    if (te.length) return failHook(te);
     return NO;
 }
 
@@ -615,6 +674,43 @@ static void evPersistMarkers(void) {
     [d writeToURL:[sessionDir URLByAppendingPathComponent:@"markers.json"] atomically:YES];
 }
 
+static NSString *evTrackKey(EVTrackInfo *info) {
+    if (info.key.length) return info.key;
+    if (info.uri.length) return info.uri;
+    return [NSString stringWithFormat:@"%@|%@|%.0f", info.title ?: @"", info.artist ?: @"", info.duration];
+}
+
+// Download = one track, from the beginning, stopped automatically. The first
+// marker is the track we restarted; the next different track (or the expected
+// duration, if playback just stops) ends the capture.
+static void evDownloadMarker(EVTrackInfo *info) {
+    if (!atomic_load(&downloadMode)) return;
+    NSString *key = evTrackKey(info);
+    BOOL first = NO, next = NO;
+    @synchronized(evSync()) {
+        if (!downloadKey) { downloadKey = [key copy]; first = YES; }
+        else next = ![downloadKey isEqualToString:key];
+    }
+    uint64_t gen = 0;
+    if (first || next) gen = atomic_fetch_add(&downloadGeneration, 1) + 1;
+    if (first) {
+        double d = info.duration > 0 ? info.duration : 0;
+        int64_t delayNs = (int64_t)((d > 0 ? d + 2.5 : 600.0) * NSEC_PER_SEC);
+        EVI("Download", @"capturing '%@' (expected %.1fs)", info.title, d);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delayNs),
+                       dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+            if (atomic_load(&downloadMode) && atomic_load(&downloadGeneration) == gen)
+                EeveeAudioRecorderStop();
+        });
+    } else if (next) {
+        EVI("Download", @"next track started; stopping");
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+            if (atomic_load(&downloadMode)) EeveeAudioRecorderStop();
+        });
+    }
+    (void)gen;
+}
+
 static void evOnTrack(EVTrackInfo *info, uint64_t frame, BOOL partial) {
     EVMarker *m = [EVMarker new];
     m.frame = frame; m.info = info; m.partialStart = partial;
@@ -624,6 +720,7 @@ static void evOnTrack(EVTrackInfo *info, uint64_t frame, BOOL partial) {
         (unsigned long long)frame, EVFormatTime((double)frame / r), info.artist, info.title, info.album,
         (long)info.trackNumber, info.duration, partial);
     evPersistMarkers();
+    evDownloadMarker(info);
 }
 
 static void *writerMain(void *unused) {
@@ -807,10 +904,54 @@ BOOL EeveeAudioRecorderStart(void) {
     return ok;
 }
 
+BOOL EeveeAudioRecorderDownloadCurrentTrack(void) {
+    if (EeveeAudioRecorderIsRecording()) {
+        setLastError(@"A recording is already running.");
+        return NO;
+    }
+    if (!EeveeAudioRecorderSupported()) {
+        setLastError(EeveeAudioRecorderLastError() ?: @"Audio capture is unavailable in this process.");
+        return NO;
+    }
+    if (!EeveePlaybackAvailable()) {
+        setLastError(@"Open the Now Playing screen once, then try again.");
+        return NO;
+    }
+    @synchronized(evSync()) { downloadKey = nil; }
+    atomic_store(&downloadGeneration, 0);
+    atomic_store(&downloadMode, true);
+
+    // Pause -> rewind -> start capture -> play. Capturing before playback
+    // resumes keeps the marker at frame 0 instead of a partial first segment.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        EeveePlaybackPause();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            EeveePlaybackSeekToStart();
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.30 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                if (!EeveeAudioRecorderStart()) {
+                    atomic_store(&downloadMode, false);
+                    @synchronized(evSync()) { downloadKey = nil; }
+                    EeveePlaybackPlay();
+                    return;
+                }
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.20 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    EeveePlaybackPlay();
+                });
+            });
+        });
+    });
+    EVI("Download", @"start requested for the current track");
+    return YES;
+}
+
 void EeveeAudioRecorderStop(void) {
     pthread_mutex_lock(&ctlLock);
     if (!atomic_load(&sessionActive)) { pthread_mutex_unlock(&ctlLock); return; }
-    EVI("Core", @"Stop requested");
+    BOOL download = atomic_load(&downloadMode);
+    atomic_store(&downloadMode, false);
+    atomic_fetch_add(&downloadGeneration, 1);
+    @synchronized(evSync()) { downloadKey = nil; }
+    EVI("Core", @"Stop requested%@", download ? @" (download)" : @"");
     atomic_store(&capturing, false);
     EVMetaStop();
     if (threadStarted) { pthread_join(writerThread, NULL); threadStarted = false; }
@@ -823,14 +964,47 @@ void EeveeAudioRecorderStop(void) {
     pthread_mutex_unlock(&ctlLock);
     evPostState();
 
+    if (download) EVSetOneShotExport(@"aac");
     EVI("Core", @"splitting %lu marker(s) over %@", (unsigned long)snapshot.count, EVFormatTime((double)total / rate));
     EVFinalizeSession(wav, rate, snapshot, total, ^(NSArray<NSURL *> *files, NSURL *folder, NSArray<NSDictionary *> *tracks, NSString *error) {
-        NSURL *first = files.firstObject;
+        NSArray<NSURL *> *outFiles = files ?: @[];
+        NSArray<NSDictionary *> *outTracks = tracks ?: @[];
+        if (download && outTracks.count) {
+            NSDictionary *t0 = outTracks.firstObject;
+            NSString *base = [t0[@"file"] stringByDeletingPathExtension];
+            NSMutableArray<NSURL *> *keep = [NSMutableArray array];
+            for (NSURL *u in outFiles)
+                if (base.length && [u.lastPathComponent hasPrefix:base]) [keep addObject:u];
+            if (keep.count) outFiles = keep;
+            outTracks = @[t0];
+            // Spotify's IOS_DOCUMENTS local-files source looks at the app's
+            // Documents folder. Move the finished file there so the scanner
+            // sees exactly one copy (Recordings/ stays for the session data).
+            for (NSURL *u in outFiles) {
+                if (![u.pathExtension.lowercaseString isEqualToString:@"m4a"]) continue;
+                NSURL *docs = [[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory
+                                                                     inDomains:NSUserDomainMask].firstObject;
+                NSURL *dst = [docs URLByAppendingPathComponent:u.lastPathComponent];
+                [[NSFileManager defaultManager] removeItemAtURL:dst error:nil];
+                if ([[NSFileManager defaultManager] moveItemAtURL:u toURL:dst error:nil]) {
+                    NSMutableArray<NSURL *> *adjusted = [outFiles mutableCopy];
+                    [adjusted replaceObjectAtIndex:[adjusted indexOfObject:u] withObject:dst];
+                    outFiles = adjusted;
+                    outputPath = dst.path;
+                    EVI("Download", @"moved to %@", dst.path);
+                }
+                break;
+            }
+            lastSessionSummary = [NSString stringWithFormat:@"Downloaded '%@'", t0[@"title"] ?: @"track"];
+        } else {
+            lastSessionSummary = [NSString stringWithFormat:@"%lu track(s) in %@", (unsigned long)outTracks.count, folder.lastPathComponent];
+        }
+        NSURL *first = outFiles.firstObject;
         if (first) outputPath = first.path;
-        lastSessionSummary = [NSString stringWithFormat:@"%lu track(s) in %@", (unsigned long)tracks.count, folder.lastPathComponent];
         dispatch_async(dispatch_get_main_queue(), ^{
             [[NSNotificationCenter defaultCenter] postNotificationName:EeveeRecorderDidFinishNotification object:nil
-                userInfo:@{@"files": files ?: @[], @"folder": folder ?: [NSNull null], @"tracks": tracks ?: @[], @"error": error ?: @""}];
+                userInfo:@{@"files": outFiles, @"folder": folder ?: [NSNull null], @"tracks": outTracks,
+                           @"error": error ?: @"", @"download": @(download)}];
         });
     });
 }
@@ -839,6 +1013,8 @@ BOOL EeveeAudioRecorderIsRecording(void) { return atomic_load(&sessionActive); }
 NSString *EeveeAudioRecorderCurrentPath(void) { return outputPath; }
 
 NSString *EeveeRecorderStatusLine(void) {
+    if (atomic_load(&sessionActive) && atomic_load(&downloadMode))
+        return [NSString stringWithFormat:@"Downloading %@", EVFormatTime((double)EVCoreFramesCaptured() / EVCoreSampleRate())];
     if (atomic_load(&sessionActive))
         return [NSString stringWithFormat:@"Recording %@", EVFormatTime((double)EVCoreFramesCaptured() / EVCoreSampleRate())];
     NSString *e = EeveeAudioRecorderLastError();

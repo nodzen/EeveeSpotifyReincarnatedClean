@@ -611,8 +611,18 @@ static void EVExportOne(NSURL *wav, NSDictionary *tags, NSData *art, uint32_t ra
     else { [outFiles addObject:dst]; EVI("Export", @"%@ finished: %@", lossless ? @"ALAC" : @"AAC", dst.lastPathComponent); }
 }
 
+static NSString *evOneShotExportFormat;
+void EVSetOneShotExport(NSString *format) {
+    @synchronized([EVTrackInfo class]) { evOneShotExportFormat = [format copy]; }
+}
+
 static NSArray<NSString *> *EVExportFormats(void) {
-    NSString *s = EVSettingString(@"exportFormats", @"");
+    NSString *one;
+    @synchronized([EVTrackInfo class]) {
+        one = [evOneShotExportFormat copy];
+        evOneShotExportFormat = nil;
+    }
+    NSString *s = one.length ? one : EVSettingString(@"exportFormats", @"");
     NSMutableArray *a = [NSMutableArray array];
     for (NSString *p in [s componentsSeparatedByString:@","]) if (p.length) [a addObject:p];
     return a;

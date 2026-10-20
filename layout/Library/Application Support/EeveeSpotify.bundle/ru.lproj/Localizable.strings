@@ -177,6 +177,7 @@ recording_storage_description = "Записи сохраняются в папк
 recorder_unavailable_description = "Для записи нужен доступ к render-callback Spotify. В этом процессе он недоступен, поэтому запись отключена.";
 start_recording = "Начать запись";
 stop_recording = "Остановить запись";
+download_current_track = "Скачать текущий трек";
 playback_controls = "Управление воспроизведением";
 playback_controls_description = "Управляет собственным плеером Spotify. После запуска один раз откройте экран «Сейчас играет», чтобы контроллер был захвачен.";
 previous_track = "Предыдущий трек";

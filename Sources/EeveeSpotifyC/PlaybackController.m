@@ -119,6 +119,15 @@ BOOL EeveePlaybackTogglePause(void) {
 }
 BOOL EeveePlaybackNext(void) { return evRun(@"next", ^(id c) { evCallBool(c, "skipToNextWhileDragging:", NO); }); }
 BOOL EeveePlaybackPrevious(void) { return evRun(@"previous", ^(id c) { evCallBool(c, "skipToPreviousWhileDragging:", NO); }); }
+BOOL EeveePlaybackSeekToStart(void) {
+    return evRun(@"seek to start", ^(id c) {
+        SEL s = sel_registerName("seekBackwardBySeconds:");
+        if ([c respondsToSelector:s])
+            ((void (*)(id, SEL, double))objc_msgSend)(c, s, 86400.0);
+        else
+            evCallBool(c, "skipToPreviousWhileDragging:", NO);
+    });
+}
 BOOL EeveePlaybackToggleShuffle(void) { return evRun(@"toggle shuffle", ^(id c) { evCall0(c, "toggleShuffleBehaviour"); }); }
 BOOL EeveePlaybackToggleRepeat(void) { return evRun(@"toggle repeat", ^(id c) { evCall0(c, "toggleRepeatMode"); }); }
 

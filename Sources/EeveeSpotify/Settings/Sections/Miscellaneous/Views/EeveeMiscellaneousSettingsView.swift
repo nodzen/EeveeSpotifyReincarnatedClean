@@ -10,6 +10,7 @@ struct EeveeMiscellaneousSettingsView: View {
     @State private var recorderAvailable: Bool = EeveeAudioRecorderSupported()
     @State private var showRecordButton: Bool = EeveeRecorderShowButton()
     @State private var playbackAvailable: Bool = EeveePlaybackAvailable()
+    @State private var downloadPending: Bool = false
 
     private func refreshRecorder() {
         isRecording = EeveeAudioRecorderIsRecording()
@@ -95,6 +96,20 @@ struct EeveeMiscellaneousSettingsView: View {
                 }
                 .disabled(!recorderAvailable)
 
+                Button {
+                    downloadPending = true
+                    if !EeveeAudioRecorderDownloadCurrentTrack() {
+                        downloadPending = false
+                        refreshRecorder()
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "arrow.down.circle")
+                        Text("download_current_track".localized)
+                    }
+                }
+                .disabled(!recorderAvailable || isRecording || downloadPending)
+
                 Text(recorderStatus)
                     .font(.footnote)
                     .foregroundColor(.secondary)
@@ -129,6 +144,15 @@ struct EeveeMiscellaneousSettingsView: View {
                     )
                 )
             }
+
+            // Spotify's tab bar overlays the hosting view; this spacer gives the
+            // list enough scroll range to bring the last section above it.
+            Section {
+                Color.clear
+                    .frame(height: 80)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+            }
         }
         .listStyle(GroupedListStyle())
         .onAppear {
@@ -136,10 +160,12 @@ struct EeveeMiscellaneousSettingsView: View {
         }
         .onReceive(NotificationCenter.default.publisher(
             for: .EeveeRecorderStateDidChange)) { _ in
+            downloadPending = false
             refreshRecorder()
         }
         .onReceive(NotificationCenter.default.publisher(
             for: .EeveeRecorderDidFinish)) { _ in
+            downloadPending = false
             refreshRecorder()
         }
         .onChange(of: blockSpotifyAnalytics) { enabled in

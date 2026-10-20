@@ -13,6 +13,7 @@ BOOL EeveePlaybackPause(void);
 BOOL EeveePlaybackTogglePause(void);
 BOOL EeveePlaybackNext(void);
 BOOL EeveePlaybackPrevious(void);
+BOOL EeveePlaybackSeekToStart(void);
 BOOL EeveePlaybackToggleShuffle(void);
 BOOL EeveePlaybackToggleRepeat(void);     // cycles Spotify's repeat modes
 NSString *EeveePlaybackStatus(void);      // "paused=0 shuffling=1 repeatMode=2 | captured via init"

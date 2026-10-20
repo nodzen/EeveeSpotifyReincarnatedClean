@@ -145,6 +145,7 @@ recording_storage_description = "Записи зберігаються в тец
 recorder_unavailable_description = "Для запису потрібен доступ до render-callback Spotify. У цьому процесі він недоступний, тому запис вимкнено.";
 start_recording = "Почати запис";
 stop_recording = "Зупинити запис";
+download_current_track = "Завантажити поточний трек";
 playback_controls = "Керування відтворенням";
 playback_controls_description = "Керує власним плеєром Spotify. Після запуску один раз відкрийте екран «Зараз грає», щоб контролер було захоплено.";
 previous_track = "Попередній трек";

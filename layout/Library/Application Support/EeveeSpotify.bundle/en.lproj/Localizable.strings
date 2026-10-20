@@ -325,6 +325,7 @@ recording_storage_description = "Recordings are saved in Spotify's Documents/Rec
 recorder_unavailable_description = "Recording needs access to Spotify's audio render callback. This process does not expose it, so the recorder is disabled.";
 start_recording = "Start Recording";
 stop_recording = "Stop Recording";
+download_current_track = "Download Current Track";
 playback_controls = "Playback Controls";
 playback_controls_description = "Controls Spotify's own player. Open the Now Playing screen once after launch so the controller is captured.";
 previous_track = "Previous Track";
