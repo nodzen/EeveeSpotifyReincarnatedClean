@@ -72,6 +72,8 @@ void EVMetaStart(EVTrackChangeBlock block);
 void EVMetaStop(void);
 NSArray<NSString *> *EVMetaDebugLines(void);
 NSString *EVLyricsForTrackInfo(EVTrackInfo *info);
+void EeveeRecorderSetTapEnabled(BOOL enabled);
+void EeveeRecorderApplyEnabledState(void);
 
 typedef void (^EVFinalizeDone)(NSArray<NSURL *> *files, NSURL *folder, NSArray<NSDictionary *> *tracks, NSString *errorText);
 void EVFinalizeSession(NSURL *sessionWav, uint32_t rate, NSArray<EVMarker *> *markers, uint64_t totalFrames, EVFinalizeDone done);

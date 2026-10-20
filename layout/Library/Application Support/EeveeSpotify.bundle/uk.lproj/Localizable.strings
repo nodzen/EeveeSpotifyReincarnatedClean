@@ -140,6 +140,8 @@ organize_listening_queue = "Керування чергою прослухову
 payment_notice = "EeveeSpotify застосовує патчі, щоб розблокувати деякі функції Premium. Це безкоштовно.";
 
 audio_recording = "Запис звуку";
+enable_recording = "Увімкнути запис";
+recorder_disabled_description = "Запис вимкнено. Spotify працює як зазвичай.";
 recording_storage_description = "Записи зберігаються в Documents/Recordings. Завантажені треки зберігаються як M4A у Documents. Обкладинка вшивається в M4A; «Зберігати обкладинку окремо» додатково залишить JPG. Кнопка завантаження — на екрані «Зараз грає».";
 recorder_unavailable_description = "Для запису потрібен доступ до render-callback Spotify. У цьому процесі він недоступний, тому запис вимкнено.";
 start_recording = "Почати запис";

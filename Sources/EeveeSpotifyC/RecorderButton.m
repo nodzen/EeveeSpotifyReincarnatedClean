@@ -179,6 +179,8 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 @property (nonatomic, assign) BOOL recordVisible;
 @property (nonatomic, assign) BOOL downloadPending;
 @property (nonatomic, assign) BOOL started;
+@property (nonatomic, assign) BOOL active;
+@property (nonatomic, strong) NSTimer *tickTimer;
 @property (nonatomic, weak) UIButton *playerDownloadButton;
 @property (nonatomic, weak) UIViewController *playerVC;
 @property (nonatomic, assign) BOOL playerDismissing;
@@ -192,6 +194,7 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 @property (nonatomic, copy) NSString *toastSummary;
 + (instancetype)shared;
 - (void)start;
+- (void)setActive:(BOOL)active;
 - (void)setRecordVisible:(BOOL)visible;
 - (void)tapDownload;
 - (void)refreshDownloadButton;
@@ -228,12 +231,38 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
     [nc addObserver:self selector:@selector(appTerminate) name:UIApplicationWillTerminateNotification object:nil];
     EVLogSetAppState(UIApplication.sharedApplication.applicationState == UIApplicationStateActive ? 0 : 2);
 
-    [NSTimer scheduledTimerWithTimeInterval:0.8 repeats:YES block:^(NSTimer *t) { [self scanTick]; [self reconcile]; }];
     EVI("UI", @"UI started");
-    [self scanTick];
+    [self setActive:EeveeAudioRecorderEnabled()];
+}
+
+- (void)setActive:(BOOL)active {
+    if (_active == active) return;
+    _active = active;
+    if (active) {
+        if (!self.tickTimer)
+            self.tickTimer = [NSTimer scheduledTimerWithTimeInterval:0.8 repeats:YES block:^(NSTimer *t) {
+                [self scanTick]; [self reconcile];
+            }];
+        [self scanTick];
+        [self reconcile];
+        EVI("UI", @"recorder UI active");
+    } else {
+        [self.tickTimer invalidate]; self.tickTimer = nil;
+        [self.playerDownloadButton removeFromSuperview];
+        self.playerDownloadButton = nil;
+        self.playerVC = nil;
+        self.downloadPending = NO;
+        [self.button removeFromSuperview];
+        self.anchor = nil;
+        [self hideFloating];
+        [self hideToast];
+        self.toastWindow = nil;
+        EVI("UI", @"recorder UI inactive");
+    }
 }
 
 - (void)setRecordVisible:(BOOL)visible {
+    if (visible && !self.active) return;
     _recordVisible = visible;
     if (!visible) {
         [self.button removeFromSuperview];
@@ -248,7 +277,7 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 
 #pragma mark app state
 
-- (void)appActive { EVLogSetAppState(0); EVI("UI", @"app active"); [self scanTick]; [self reconcile]; }
+- (void)appActive { EVLogSetAppState(0); EVI("UI", @"app active"); if (self.active) { [self scanTick]; [self reconcile]; } }
 - (void)appInactive { EVLogSetAppState(1); }
 - (void)appBackground {
     EVLogSetAppState(2);
@@ -263,7 +292,7 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 #pragma mark anchoring
 
 - (void)scanTick {
-    if (!self.recordVisible || !self.button) return;
+    if (!self.active || !self.recordVisible || !self.button) return;
     if (UIApplication.sharedApplication.applicationState == UIApplicationStateBackground) return;
     UIView *a = self.anchor;
     if (a && (!a.window || a.isHidden)) { [self.button removeFromSuperview]; self.anchor = nil; a = nil; }
@@ -378,6 +407,7 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 #pragma mark state / actions
 
 - (void)reconcile {
+    if (!self.active) return;
     BOOL rec = EeveeAudioRecorderIsRecording();
     if (self.state == EVRecIdle && rec) { self.state = EVRecRecording; self.token++; [self.button showBlink]; }
     else if (self.state == EVRecRecording && !rec) {
@@ -389,6 +419,7 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 }
 
 - (void)tap {
+    if (!self.active || !EeveeAudioRecorderEnabled()) return;
     if (self.state == EVRecStarting || self.state == EVRecStopping) return;
     EVI("UI", @"button tapped in state %ld", (long)self.state);
     if (self.state == EVRecIdle) {
@@ -438,6 +469,10 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 #pragma mark player download button
 
 - (void)refreshDownloadButton {
+    if (!self.active || !EeveeAudioRecorderEnabled()) {
+        [self.playerDownloadButton removeFromSuperview];
+        return;
+    }
     BOOL busy = self.downloadPending || EeveeAudioRecorderIsRecording();
     self.playerDownloadButton.enabled = !busy;
     self.playerDownloadButton.alpha = busy ? 0.4 : 1.0;
@@ -448,6 +483,7 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 }
 
 - (void)tapDownload {
+    if (!self.active || !EeveeAudioRecorderEnabled()) return;
     if (self.downloadPending || EeveeAudioRecorderIsRecording()) {
         [self showToastTitle:@"Busy" sub:@"Wait for the current recording/download to finish." image:nil duration:4];
         return;
@@ -479,6 +515,7 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
     id folder = n.userInfo[@"folder"];
     BOOL download = [n.userInfo[@"download"] boolValue];
     self.downloadPending = NO;
+    if (!self.active) return;
     if ([folder isKindOfClass:NSURL.class]) self.lastFolder = folder;
     NSMutableArray *share = [NSMutableArray array];
     UIImage *thumb = nil;
@@ -515,6 +552,7 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 #pragma mark toast / share
 
 - (void)showToastTitle:(NSString *)title sub:(NSString *)sub image:(UIImage *)img duration:(NSTimeInterval)d {
+    if (!self.active) return;
     EVI("UI", @"toast: %@ | %@", title, sub);
     UIWindowScene *scene = EVScene();
     if (!scene) return;
@@ -635,11 +673,12 @@ static void evPlacePlayerDownloadButton(UIViewController *vc) {
 
 static void evInstallPlayerDownloadButton(UIViewController *vc) {
     if (!vc.isViewLoaded) return;
-    if ([EVRecUI shared].playerDismissing) {
-        [objc_getAssociatedObject(vc, &kEVPlayerDownloadButtonKey) removeFromSuperview];
+    UIButton *existing = objc_getAssociatedObject(vc, &kEVPlayerDownloadButtonKey);
+    if (![EVRecUI shared].active || !EeveeAudioRecorderEnabled() || [EVRecUI shared].playerDismissing) {
+        [existing removeFromSuperview];
         return;
     }
-    UIButton *b = objc_getAssociatedObject(vc, &kEVPlayerDownloadButtonKey);
+    UIButton *b = existing;
     if (!b) {
         b = [UIButton buttonWithType:UIButtonTypeSystem];
         [b setImage:[UIImage systemImageNamed:@"arrow.down.to.line"] forState:UIControlStateNormal];
@@ -865,10 +904,30 @@ void EeveeRecorderSetShowButton(BOOL show) {
     [[EVRecUI shared] setRecordVisible:show];
 }
 
-__attribute__((constructor)) static void evUIInit(void) {
-    dispatch_async(dispatch_get_main_queue(), ^{ evInstallPlayerButtonHook(0); });
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+void EeveeRecorderApplyEnabledState(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (!EeveeAudioRecorderEnabled()) {
+            [[EVRecUI shared] setActive:NO];
+            return;
+        }
         if (!EeveeAudioRecorderSupported()) return;
         [[EVRecUI shared] start];
+        [[EVRecUI shared] setActive:YES];
+        evInstallPlayerButtonHook(0);
+    });
+}
+
+void EeveeAudioRecorderSetEnabled(BOOL enabled) {
+    BOOL was = EeveeAudioRecorderEnabled();
+    EVSetSettingBool(@"recordEnabled", enabled);
+    if (!enabled) EeveeAudioRecorderStop();
+    EeveeRecorderSetTapEnabled(enabled);
+    if (was != enabled || enabled) EeveeRecorderApplyEnabledState();
+}
+
+__attribute__((constructor)) static void evUIInit(void) {
+    if (!EeveeAudioRecorderEnabled()) return;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        EeveeRecorderApplyEnabledState();
     });
 }

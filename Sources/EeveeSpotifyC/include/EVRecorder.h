@@ -23,6 +23,10 @@ BOOL EeveeAudioRecorderDownloadCurrentTrack(void);
 BOOL EeveeAudioRecorderIsRecording(void);
 NSString *EeveeAudioRecorderCurrentPath(void);
 
+// Master switch. When NO, the recorder installs no capture/UI/timers and
+// Spotify behaves normally. Default is NO.
+BOOL EeveeAudioRecorderEnabled(void);
+void EeveeAudioRecorderSetEnabled(BOOL enabled);
 // NO when the process has no inline-hooking shim (plain sideload without JIT).
 BOOL EeveeAudioRecorderSupported(void);
 // On-screen record button preference. Takes effect on the next launch.
@@ -33,6 +37,7 @@ void EeveeRecorderSetShowButton(BOOL show);
 NSString *EeveeAudioRecorderLastError(void);          // why the last Start failed, nil if none
 NSString *EeveeRecorderStatusLine(void);              // short text for a settings row
 void EeveeRecorderSetExtraMetadata(NSDictionary *md); // title, artist, album, albumArtist, genre, trackNumber, discNumber, year, uri, isrc
+NSDictionary *EeveeRecorderCurrentMetadata(void);     // latest player metadata (may be empty)
 BOOL EeveeRecorderSaveArtwork(void);                  // keep a separate JPG next to the M4A
 void EeveeRecorderSetSaveArtwork(BOOL save);
 BOOL EeveeRecorderEmbedLyrics(void);                  // write cached Genius lyrics into the M4A

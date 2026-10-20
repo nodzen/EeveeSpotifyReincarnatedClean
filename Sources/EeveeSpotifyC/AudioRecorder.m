@@ -8,6 +8,7 @@
 #import <AudioToolbox/AudioToolbox.h>
 #import <AVFoundation/AVFoundation.h>
 #import <Foundation/Foundation.h>
+#import <MediaPlayer/MediaPlayer.h>
 #import <UIKit/UIKit.h>
 #import <stdatomic.h>
 #import <pthread.h>
@@ -124,9 +125,7 @@ typedef struct EVTapContext {
     AudioUnit unit;
     AudioUnitScope scope;
     AudioUnitElement element;
-    uint32_t rate;
-    uint32_t channels;
-    bool rateProbed;
+    _Atomic(uint32_t) rate;
     EVResampler resampler;
 } EVTapContext;
 
@@ -134,10 +133,25 @@ static AudioUnitSetPropertyFn originalSetProperty;
 static pthread_mutex_t tapLock = PTHREAD_MUTEX_INITIALIZER;
 static _Atomic(int) tapState;                 // 0 untried, 1 installed, 2 failed
 static _Atomic(bool) tapCaptureEnabled = true;
+static _Atomic(EVTapContext *) tapLastContext;
 static NSString *tapError;
 static _Atomic(uint64_t) tapWrapCount, tapCallbackCount;
 static _Atomic(uint32_t) tapRate, tapChannels;
 static _Atomic(uintptr_t) tapLastUnit, tapLastOriginal;
+
+// While the master switch is off the GOT entry only records Spotify's render
+// callback and forwards it untouched. Enabling wraps that callback immediately.
+typedef struct {
+    AudioUnit unit;
+    AudioUnitScope scope;
+    AudioUnitElement element;
+    AURenderCallback proc;
+    void *refCon;
+    bool valid;
+} EVTapPending;
+static EVTapPending tapPending;
+static pthread_mutex_t tapPendingLock = PTHREAD_MUTEX_INITIALIZER;
+static BOOL evTapInstallOnce(void);
 
 static NSObject *evSync(void) {
     static NSObject *o; static dispatch_once_t t;
@@ -393,28 +407,36 @@ static void captureBuffers(AudioBufferList *list, UInt32 frames, uint32_t srcRat
     atomic_fetch_add_explicit(&statCaptured, 1, memory_order_relaxed);
 }
 
-static void evTapProbeFormat(EVTapContext *ctx, bool final) {
-    if (!ctx || ctx->rate) return;
-    if (final && ctx->rateProbed) return;
-    if (final) ctx->rateProbed = true;
-
+// AudioUnitGetProperty is not realtime-safe. Read the format from a utility
+// queue instead of the render callback; retry until Spotify's unit is ready.
+static void evTapProbeFormat(EVTapContext *ctx) {
+    if (!ctx || atomic_load_explicit(&ctx->rate, memory_order_relaxed)) return;
     AudioStreamBasicDescription asbd = {0};
     UInt32 size = sizeof(asbd);
     if (AudioUnitGetProperty(ctx->unit, kAudioUnitProperty_StreamFormat,
                              ctx->scope, ctx->element, &asbd, &size) != noErr) return;
     uint32_t rate = (uint32_t)asbd.mSampleRate;
     if (rate < 8000 || rate > 192000) return;
-    ctx->rate = rate;
+    atomic_store(&ctx->rate, rate);
     atomic_store(&tapRate, rate);
-    if (asbd.mChannelsPerFrame >= 1 && asbd.mChannelsPerFrame <= 2) {
-        ctx->channels = asbd.mChannelsPerFrame;
+    if (asbd.mChannelsPerFrame >= 1 && asbd.mChannelsPerFrame <= 2)
         atomic_store(&tapChannels, asbd.mChannelsPerFrame);
+}
+
+static void evTapProbeSoon(EVTapContext *ctx, int attempt) {
+    if (!ctx || atomic_load_explicit(&ctx->rate, memory_order_relaxed) || attempt > 40) return;
+    evTapProbeFormat(ctx);
+    if (!atomic_load_explicit(&ctx->rate, memory_order_relaxed)) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
+                       dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+            evTapProbeSoon(ctx, attempt + 1);
+        });
     }
 }
 
 // Spotify can change the unit format without replacing the callback (usually
-// when a Bluetooth route connects). Re-read it occasionally; the resampler
-// below keeps the file at the session rate.
+// when a Bluetooth route connects). The writer thread re-reads it off the
+// realtime path; the resampler keeps the file at the session rate.
 static void evTapRefreshRate(EVTapContext *ctx) {
     if (!ctx) return;
     AudioStreamBasicDescription asbd = {0};
@@ -422,10 +444,11 @@ static void evTapRefreshRate(EVTapContext *ctx) {
     if (AudioUnitGetProperty(ctx->unit, kAudioUnitProperty_StreamFormat,
                              ctx->scope, ctx->element, &asbd, &size) != noErr) return;
     uint32_t rate = (uint32_t)asbd.mSampleRate;
-    if (rate < 8000 || rate > 192000 || rate == ctx->rate) return;
-    EVI("Tap", @"input rate changed %u -> %u Hz", ctx->rate, rate);
-    ctx->rate = rate;
+    uint32_t old = atomic_load_explicit(&ctx->rate, memory_order_relaxed);
+    if (rate < 8000 || rate > 192000 || rate == old) return;
+    atomic_store(&ctx->rate, rate);
     atomic_store(&tapRate, rate);
+    if (old) EVI("Tap", @"input rate changed %u -> %u Hz", old, rate);
 }
 
 // Wraps Spotify's render callback without touching its code. The original
@@ -442,10 +465,7 @@ static OSStatus evTapRender(void *refCon, AudioUnitRenderActionFlags *flags, con
         !atomic_load_explicit(&capturing, memory_order_relaxed) ||
         !atomic_load_explicit(&sessionActive, memory_order_relaxed)) return status;
 
-    evTapProbeFormat(ctx, true);
-    if ((atomic_load_explicit(&tapCallbackCount, memory_order_relaxed) & 511) == 511)
-        evTapRefreshRate(ctx);
-    uint32_t srcRate = ctx->rate;
+    uint32_t srcRate = atomic_load_explicit(&ctx->rate, memory_order_relaxed);
     uint32_t sessionRate = atomic_load_explicit(&sampleRate, memory_order_relaxed);
     if (srcRate && sessionRate && srcRate != sessionRate) {
         if (atomic_load_explicit(&framesCaptured, memory_order_relaxed) == 0) {
@@ -473,31 +493,80 @@ static OSStatus evTapRender(void *refCon, AudioUnitRenderActionFlags *flags, con
     return status;
 }
 
+static OSStatus evWrapRenderCallback(AudioUnit unit, AudioUnitScope scope, AudioUnitElement element,
+                                     AURenderCallback proc, void *refCon) {
+    if (!proc || !originalSetProperty) return kAudioUnitErr_Uninitialized;
+    EVTapContext *ctx = calloc(1, sizeof(*ctx));
+    if (!ctx) return kAudioUnitErr_Uninitialized;
+    ctx->original = proc;
+    ctx->originalRefCon = refCon;
+    ctx->unit = unit;
+    ctx->scope = scope;
+    ctx->element = element;
+
+    AURenderCallbackStruct wrapped = { evTapRender, ctx };
+    OSStatus status = originalSetProperty(unit, kAudioUnitProperty_SetRenderCallback,
+                                          scope, element, &wrapped, sizeof(wrapped));
+    if (status != noErr) { free(ctx); return status; }
+    atomic_fetch_add_explicit(&tapWrapCount, 1, memory_order_relaxed);
+    atomic_store(&tapLastUnit, (uintptr_t)unit);
+    atomic_store(&tapLastOriginal, (uintptr_t)proc);
+    atomic_store(&tapLastContext, ctx);
+    evTapProbeSoon(ctx, 0);
+    EVI("Tap", @"wrapped render callback unit=%p orig=%p", unit, (void *)proc);
+    return status;
+}
+
+static void evTapActivatePending(void) {
+    EVTapPending p;
+    pthread_mutex_lock(&tapPendingLock);
+    p = tapPending;
+    tapPending.valid = false;
+    pthread_mutex_unlock(&tapPendingLock);
+    if (p.valid) evWrapRenderCallback(p.unit, p.scope, p.element, p.proc, p.refCon);
+}
+
+static void evTapDeactivate(void) {
+    EVTapContext *ctx = atomic_exchange(&tapLastContext, NULL);
+    if (!ctx || !originalSetProperty) return;
+    AURenderCallbackStruct original = { ctx->original, ctx->originalRefCon };
+    OSStatus status = originalSetProperty(ctx->unit, kAudioUnitProperty_SetRenderCallback,
+                                          ctx->scope, ctx->element, &original, sizeof(original));
+    EVI("Tap", @"render callback restored (%d)", (int)status);
+}
+
+void EeveeRecorderSetTapEnabled(BOOL enabled) {
+    if (enabled) {
+        if (evTapInstallOnce()) evTapActivatePending();
+    } else {
+        atomic_store(&downloadMode, false);
+        atomic_fetch_add(&downloadGeneration, 1);
+        @synchronized(evSync()) { downloadKey = nil; }
+        evTapDeactivate();
+    }
+}
+
 static OSStatus evTapSetProperty(AudioUnit unit, AudioUnitPropertyID prop, AudioUnitScope scope,
                                  AudioUnitElement element, const void *data, UInt32 size) {
     if (prop == kAudioUnitProperty_SetRenderCallback && data && size >= sizeof(AURenderCallbackStruct)) {
         const AURenderCallbackStruct *original = (const AURenderCallbackStruct *)data;
         if (original->inputProc && originalSetProperty) {
-            EVTapContext *ctx = calloc(1, sizeof(*ctx));
-            if (ctx) {
-                ctx->original = original->inputProc;
-                ctx->originalRefCon = original->inputProcRefCon;
-                ctx->unit = unit;
-                ctx->scope = scope;
-                ctx->element = element;
-                evTapProbeFormat(ctx, false);
-
-                AURenderCallbackStruct wrapped = { evTapRender, ctx };
-                OSStatus status = originalSetProperty(unit, prop, scope, element, &wrapped, sizeof(wrapped));
-                if (status == noErr) {
-                    atomic_fetch_add_explicit(&tapWrapCount, 1, memory_order_relaxed);
-                    atomic_store(&tapLastUnit, (uintptr_t)unit);
-                    atomic_store(&tapLastOriginal, (uintptr_t)original->inputProc);
-                    EVI("Tap", @"wrapped render callback unit=%p orig=%p rate=%u ch=%u",
-                        unit, (void *)original->inputProc, ctx->rate, ctx->channels);
-                    return status;
-                }
-                free(ctx);
+            if (!EeveeAudioRecorderEnabled()) {
+                // Master switch is off: remember what Spotify installed and
+                // pass the callback through untouched.
+                pthread_mutex_lock(&tapPendingLock);
+                tapPending = (EVTapPending){ unit, scope, element, original->inputProc,
+                                             original->inputProcRefCon, true };
+                pthread_mutex_unlock(&tapPendingLock);
+                return originalSetProperty(unit, prop, scope, element, data, size);
+            }
+            OSStatus status = evWrapRenderCallback(unit, scope, element,
+                                                   original->inputProc, original->inputProcRefCon);
+            if (status == noErr) {
+                pthread_mutex_lock(&tapPendingLock);
+                tapPending.valid = false;
+                pthread_mutex_unlock(&tapPendingLock);
+                return status;
             }
         }
     }
@@ -760,41 +829,62 @@ static NSString *evTrackKey(EVTrackInfo *info) {
 }
 
 // Download = one track, from the beginning, stopped automatically. The first
-// marker is the track we restarted; the next different track (or the expected
-// duration, if playback just stops) ends the capture.
-// Downloads stop on captured duration, not on wall time: if Spotify takes a
-// moment to resume after the rewind, the end of the track must still fit in
-// the file. The wall-clock deadline only guards against a stalled player.
-static void evDownloadWatch(uint64_t gen, double expected, uint64_t startedMs,
-                            uint64_t prevFrames, uint64_t lastProgressMs) {
+// marker is the track we restarted; the next different track also stops it.
+// The watchdog starts before the marker, so an empty MPNowPlayingInfoCenter can
+// never leave a download recording forever.
+static void evDownloadWatch(uint64_t gen, double expected, uint64_t requestedMs,
+                            uint64_t prevFrames, uint64_t lastProgressMs, uint64_t firstFrameMs) {
     if (!atomic_load(&downloadMode) || atomic_load(&downloadGeneration) != gen) return;
     uint64_t now = evNowMs();
     uint64_t frames = EVCoreFramesCaptured();
     uint32_t rate = EVCoreSampleRate() ? EVCoreSampleRate() : 44100;
     double captured = (double)frames / rate;
-    double target = expected > 0 ? expected + 2.5 : 600.0;
-    if (frames > prevFrames) lastProgressMs = now;
+    double target = expected > 0 ? expected + 2.5 : 0;
+    if (frames > prevFrames) {
+        lastProgressMs = now;
+        if (!firstFrameMs && frames > 0) firstFrameMs = now;
+    }
 
-    if (captured >= target) {
+    if (target > 0 && captured >= target) {
         EVI("Download", @"captured %.1fs (target %.1fs); stopping", captured, target);
         EeveeAudioRecorderStop();
         return;
     }
-    if (frames < rate / 2 && now - lastProgressMs > 15000) {
-        setLastError(@"Playback did not produce audio after the rewind. Try pressing play, then download again.");
-        EVE("Download", @"no audio frames for 15 s; stopping");
+    // Wall clock is the safety net: frames can undercount, but the track has
+    // still ended. A few seconds of tail also covers the seek resume.
+    if (expected > 0 && firstFrameMs && now - firstFrameMs > (uint64_t)((expected + 3.5) * 1000)) {
+        EVI("Download", @"end of track (%.1fs, captured %.1fs); stopping", expected, captured);
         EeveeAudioRecorderStop();
         return;
     }
-    if (now - startedMs > (uint64_t)((target + 90.0) * 1000)) {
-        setLastError([NSString stringWithFormat:@"Download timed out after %.0fs (captured %.1fs).", (now - startedMs) / 1000.0, captured]);
-        EVE("Download", @"timeout after %.0fs, captured %.1fs", (now - startedMs) / 1000.0, captured);
+    // When Spotify gives no duration, stop shortly after the audio stops.
+    if (expected <= 0 && frames > rate / 2 && now - lastProgressMs > 8000) {
+        EVI("Download", @"audio stopped at %.1fs; stopping", captured);
+        EeveeAudioRecorderStop();
+        return;
+    }
+    if (frames > rate / 2 && EeveePlaybackAvailable() && EeveePlaybackIsPaused() &&
+        now - lastProgressMs > 1000) {
+        EVI("Download", @"playback paused at %.1fs; stopping", captured);
+        EeveeAudioRecorderStop();
+        return;
+    }
+    if (frames < rate / 2 && now - requestedMs > 30000) {
+        setLastError(@"Playback did not produce audio after the rewind. Try pressing play, then download again.");
+        EVE("Download", @"no audio frames for 30 s; stopping");
+        EeveeAudioRecorderStop();
+        return;
+    }
+    uint64_t hardMs = expected > 0 ? (uint64_t)((expected + 60.0) * 1000) : 900000ull;
+    if (now - requestedMs > hardMs) {
+        setLastError([NSString stringWithFormat:@"Download timed out after %.0fs (captured %.1fs).", (now - requestedMs) / 1000.0, captured]);
+        EVE("Download", @"timeout after %.0fs, captured %.1fs", (now - requestedMs) / 1000.0, captured);
         EeveeAudioRecorderStop();
         return;
     }
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
                    dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-        evDownloadWatch(gen, expected, startedMs, frames, lastProgressMs);
+        evDownloadWatch(gen, expected, requestedMs, frames, lastProgressMs, firstFrameMs);
     });
 }
 
@@ -806,16 +896,8 @@ static void evDownloadMarker(EVTrackInfo *info) {
         if (!downloadKey) { downloadKey = [key copy]; first = YES; }
         else next = ![downloadKey isEqualToString:key];
     }
-    uint64_t gen = 0;
-    if (first || next) gen = atomic_fetch_add(&downloadGeneration, 1) + 1;
     if (first) {
-        double d = info.duration > 0 ? info.duration : 0;
-        uint64_t now = evNowMs();
-        EVI("Download", @"capturing '%@' (expected %.1fs)", info.title, d);
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
-                       dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-            evDownloadWatch(gen, d, now, 0, now);
-        });
+        EVI("Download", @"capturing '%@' (expected %.1fs)", info.title, info.duration > 0 ? info.duration : 0);
     } else if (next) {
         EVI("Download", @"next track started; stopping");
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
@@ -890,6 +972,8 @@ static void *writerMain(void *unused) {
         if (now - lastCaller >= 500) { lastCaller = now; refreshCallerRange(); }
         if (now - lastHdr >= 2000) { lastHdr = now; writeWAVHeader(outputFile, EVCoreSampleRate(), written); }  // file stays playable after a crash
         if (now - lastStat >= 2000) {
+            EVTapContext *tap = atomic_load(&tapLastContext);
+            if (tap) evTapRefreshRate(tap);   // off the realtime thread
             lastStat = now;
             uint64_t calls = atomic_load(&statCalls), cap = atomic_load(&statCaptured), frames = EVCoreFramesCaptured();
             uint32_t pk = atomic_exchange(&peakBits, 0); float peak; memcpy(&peak, &pk, 4);
@@ -935,6 +1019,7 @@ static BOOL evFail(NSString *msg) {
 }
 
 static BOOL evStartLocked(void) {
+    if (!EeveeAudioRecorderEnabled()) return evFail(@"Recording is turned off in Experimental settings.");
     if (atomic_load(&sessionActive)) return YES;
     setLastError(nil);
     EVI("Core", @"Start requested");
@@ -1003,11 +1088,19 @@ static BOOL evStartLocked(void) {
 }
 
 BOOL EeveeAudioRecorderSupported(void) {
-    if (evTapInstallOnce()) return YES;
+    if (evTapInstallOnce()) {
+        if (EeveeAudioRecorderEnabled()) evTapActivatePending();
+        return YES;
+    }
     return dlsym(RTLD_DEFAULT, "MSHookFunction") != NULL;
 }
 
 BOOL EeveeAudioRecorderStart(void) {
+    if (!EeveeAudioRecorderEnabled()) {
+        setLastError(@"Recording is turned off in Experimental settings.");
+        evPostState();
+        return NO;
+    }
     pthread_mutex_lock(&ctlLock);
     BOOL ok = evStartLocked();
     pthread_mutex_unlock(&ctlLock);
@@ -1025,22 +1118,22 @@ static void evDownloadPlay(int attempt) {
     if (!atomic_load(&downloadMode)) return;
     if (!EeveePlaybackAvailable()) return;
     EeveePlaybackPlay();
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (!atomic_load(&downloadMode)) return;
         if (EeveePlaybackAvailable() && EeveePlaybackIsPaused() && attempt < 3) {
             EVI("Download", @"still paused after play (attempt %d); retrying", attempt + 1);
             evDownloadPlay(attempt + 1);
             return;
         }
-        // A player that reports "playing" but renders no frames needs the
-        // pause/play kick users do by hand.
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.7 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // Some players report "playing" while their renderer is still stalled.
+        // One extra rewind reproduces the manual fix without pause/play kicks.
+        if (attempt >= 2) return;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             if (!atomic_load(&downloadMode)) return;
-            uint32_t rate = EVCoreSampleRate() ? EVCoreSampleRate() : 44100;
-            if (EVCoreFramesCaptured() < rate / 4 && attempt < 3) {
-                EVI("Download", @"no audio frames yet (attempt %d); toggling pause/play", attempt + 1);
-                EeveePlaybackPause();
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (EVCoreFramesCaptured() == 0) {
+                EVI("Download", @"no audio frames yet; rewinding once more");
+                EeveePlaybackSeekToStart();
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     if (atomic_load(&downloadMode)) evDownloadPlay(attempt + 1);
                 });
             }
@@ -1051,7 +1144,8 @@ static void evDownloadPlay(int attempt) {
 static void evDownloadWaitForRewind(int ticks) {
     if (!atomic_load(&downloadMode)) return;
     double elapsed = EeveePlaybackElapsed();
-    if (elapsed > 1.0 && ticks < 50) {
+    // Give Spotify a few ticks to apply the seek, not just one stale read.
+    if ((elapsed > 1.0 || ticks < 4) && ticks < 50) {
         if (ticks == 0) EVI("Download", @"waiting for rewind (elapsed %.2fs)", elapsed);
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             evDownloadWaitForRewind(ticks + 1);
@@ -1061,16 +1155,27 @@ static void evDownloadWaitForRewind(int ticks) {
     if (elapsed > 1.0) EVW("Download", @"rewind not confirmed (elapsed %.2fs); continuing", elapsed);
     if (!EeveeAudioRecorderStart()) {
         atomic_store(&downloadMode, false);
+        atomic_fetch_add(&downloadGeneration, 1);
         @synchronized(evSync()) { downloadKey = nil; }
         EeveePlaybackPlay();
         return;
     }
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         evDownloadPlay(0);
     });
 }
 
+static double evNowPlayingDuration(void) {
+    NSDictionary *info = MPNowPlayingInfoCenter.defaultCenter.nowPlayingInfo;
+    double d = [info[MPMediaItemPropertyPlaybackDuration] doubleValue];
+    return (d >= 1.0 && d <= 86400.0) ? d : 0.0;
+}
+
 BOOL EeveeAudioRecorderDownloadCurrentTrack(void) {
+    if (!EeveeAudioRecorderEnabled()) {
+        setLastError(@"Recording is turned off in Experimental settings.");
+        return NO;
+    }
     if (EeveeAudioRecorderIsRecording()) {
         setLastError(@"A recording is already running.");
         return NO;
@@ -1084,10 +1189,19 @@ BOOL EeveeAudioRecorderDownloadCurrentTrack(void) {
         return NO;
     }
     @synchronized(evSync()) { downloadKey = nil; }
-    atomic_store(&downloadGeneration, 0);
+    uint64_t gen = atomic_fetch_add(&downloadGeneration, 1) + 1;
     atomic_store(&downloadMode, true);
+    double expected = evNowPlayingDuration();
+    uint64_t requested = evNowMs();
+    EVI("Download", @"start requested (expected %.1fs)", expected);
+    // The watchdog must not wait for a metadata marker: MPNowPlayingInfoCenter
+    // can be empty for the whole playback, which used to leave capture running.
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        evDownloadWatch(gen, expected, requested, 0, requested, 0);
+    });
 
     dispatch_async(dispatch_get_main_queue(), ^{
+        if (!atomic_load(&downloadMode)) return;
         EeveePlaybackPause();
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             if (!atomic_load(&downloadMode)) return;
@@ -1097,7 +1211,6 @@ BOOL EeveeAudioRecorderDownloadCurrentTrack(void) {
             });
         });
     });
-    EVI("Download", @"start requested for the current track");
     return YES;
 }
 

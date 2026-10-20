@@ -109,6 +109,8 @@ NSString *EVSettingString(NSString *k, NSString *d) {
 }
 void EVSetSettingString(NSString *k, NSString *v) { [[NSUserDefaults standardUserDefaults] setObject:v forKey:evKey(k)]; }
 
+BOOL EeveeAudioRecorderEnabled(void) { return EVSettingBool(@"recordEnabled", NO); }
+
 BOOL EVSaveArtworkFile(void) { return EVSettingBool(@"saveArtwork", NO); }
 BOOL EeveeRecorderSaveArtwork(void) { return EVSaveArtworkFile(); }
 void EeveeRecorderSetSaveArtwork(BOOL save) { EVSetSettingBool(@"saveArtwork", save); }
@@ -292,12 +294,14 @@ static void EVApplyExtra(EVTrackInfo *t) {
     NSString *(^S)(NSString *) = ^NSString *(NSString *k) { return EVStr(x[k]); };
     NSString *xt = S(@"title");
     NSString *xu = S(@"uri") ?: S(@"track_uri");
-    BOOL uriMatch = xu.length && t.uri.length && [EVStableTrackKey(xu) isEqualToString:EVStableTrackKey(t.uri)];
+    NSString *xtID = EVSpotifyTrackID(xu);
+    NSString *tID = EVSpotifyTrackID(t.uri);
+    BOOL uriMatch = xtID.length && tID.length && [xtID isEqualToString:tID];
     BOOL titleMatch = xt && t.title && [xt caseInsensitiveCompare:t.title] == NSOrderedSame;
-    BOOL hasTrackID = EVSpotifyTrackID(t.uri).length > 0;
-    // Accept metadata when either identity matches; a differing MP external ID
-    // (it is not always a track URI) must not throw away a matching title.
-    if (xu.length && t.uri.length && !uriMatch && !titleMatch) return;
+    // A real track URI on both sides must agree. When MPNowPlayingInfo has a
+    // non-track external ID, the player metadata is the only reliable source.
+    if (xtID.length && tID.length && !uriMatch) return;
+    if (xu.length && !xtID.length && t.title && !titleMatch) return;
     if (!xu.length && xt && t.title && !titleMatch) return;   // belongs to another track
     if (S(@"artist")) t.artist = S(@"artist");
     if (S(@"album")) t.album = S(@"album");
@@ -307,7 +311,7 @@ static void EVApplyExtra(EVTrackInfo *t) {
     // MPNowPlayingInfoCenter's external ID is not always a Spotify track URI.
     // Prefer the player's real URI whenever the current one cannot yield a
     // track id, otherwise oEmbed has nothing to look up.
-    if (xu.length && (uriMatch || titleMatch || !t.uri.length || !hasTrackID)) t.uri = xu;
+    if (xu.length && (uriMatch || titleMatch || !tID.length)) t.uri = xu;
     NSString *img = S(@"image_url") ?: S(@"image_uri") ?: S(@"image") ?: S(@"cover_art") ?: S(@"cover") ?: S(@"artwork");
     NSString *abs = EVAbsoluteImageURL(img);
     if (abs) t.artworkURL = abs;
@@ -318,9 +322,16 @@ static void EVApplyExtra(EVTrackInfo *t) {
 }
 
 void EeveeRecorderSetExtraMetadata(NSDictionary *md) {
+    if (!EeveeAudioRecorderEnabled()) return;
     NSDictionary *old;
     @synchronized([EVTrackInfo class]) { old = evExtra; evExtra = [md copy]; }
     if (![old isEqualToDictionary:md]) EVI("Meta", @"extra metadata supplied: %@", md.allKeys);
+}
+
+NSDictionary *EeveeRecorderCurrentMetadata(void) {
+    NSDictionary *x;
+    @synchronized([EVTrackInfo class]) { x = [evExtra copy]; }
+    return x ?: @{};
 }
 
 static void EVMergeInto(EVTrackInfo *dst, EVTrackInfo *src) {
@@ -851,6 +862,8 @@ static void EVExportOne(NSURL *wav, NSDictionary *tags, NSData *art, uint32_t ra
     uint32_t br = EVEncoderBitrate(source);
     EVI("Export", @"%@ started: %@ (%@)", lossless ? @"ALAC" : @"AAC", dst.lastPathComponent,
         lossless ? @"lossless" : [NSString stringWithFormat:@"%u kbps, stream %u bps", br / 1000, source]);
+    if (EeveeRecorderEmbedLyrics())
+        EVI("Export", @"lyrics for %@: %lu chars", dst.lastPathComponent, (unsigned long)[tags[@"lyrics"] length]);
     NSString *err = EVExportM4A(wav, dst, lossless, rate, br, EVMetaItems(tags, art));
     if (err) { [errs addObject:[NSString stringWithFormat:@"%@: %@", dst.lastPathComponent, err]]; EVE("Export", @"%@ failed: %@", dst.lastPathComponent, err); }
     else { [outFiles addObject:dst]; EVI("Export", @"%@ finished: %@", lossless ? @"ALAC" : @"AAC", dst.lastPathComponent); }

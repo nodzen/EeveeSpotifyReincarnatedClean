@@ -4,9 +4,10 @@ import EeveeSpotifyC
 
 struct EeveeExperimentsSettingsView: View {
     @State var experimentsOptions = UserDefaults.experimentsOptions
+    @State private var recorderEnabled: Bool = EeveeAudioRecorderEnabled()
     @State private var isRecording: Bool = EeveeAudioRecorderIsRecording()
     @State private var recorderStatus: String = EeveeRecorderStatusLine() ?? ""
-    @State private var recorderAvailable: Bool = EeveeAudioRecorderSupported()
+    @State private var recorderAvailable: Bool = false
     @State private var saveArtwork: Bool = EeveeRecorderSaveArtwork()
     @State private var embedLyrics: Bool = EeveeRecorderEmbedLyrics()
 
@@ -19,10 +20,27 @@ struct EeveeExperimentsSettingsView: View {
         List {
             Section(
                 header: Text("audio_recording".localized),
-                footer: Text(recorderAvailable
-                    ? "recording_storage_description".localized
-                    : "recorder_unavailable_description".localized)
+                footer: Text(!recorderEnabled
+                    ? "recorder_disabled_description".localized
+                    : recorderAvailable
+                        ? "recording_storage_description".localized
+                        : "recorder_unavailable_description".localized)
             ) {
+                Toggle(
+                    "enable_recording".localized,
+                    isOn: Binding<Bool>(
+                        get: { recorderEnabled },
+                        set: { enabled in
+                            recorderEnabled = enabled
+                            EeveeAudioRecorderSetEnabled(enabled)
+                            recorderAvailable = enabled && EeveeAudioRecorderSupported()
+                            if enabled { startRecorderTrackTimer() }
+                            else { stopRecorderTrackTimer() }
+                            refreshRecorder()
+                        }
+                    )
+                )
+
                 Button {
                     if isRecording {
                         EeveeAudioRecorderStop()
@@ -40,7 +58,7 @@ struct EeveeExperimentsSettingsView: View {
                         Text(isRecording ? "stop_recording".localized : "start_recording".localized)
                     }
                 }
-                .disabled(!recorderAvailable)
+                .disabled(!recorderEnabled || !recorderAvailable)
 
                 Toggle(
                     "save_artwork".localized,
@@ -52,7 +70,7 @@ struct EeveeExperimentsSettingsView: View {
                         }
                     )
                 )
-                .disabled(!recorderAvailable)
+                .disabled(!recorderEnabled || !recorderAvailable)
 
                 Toggle(
                     "embed_genius_lyrics".localized,
@@ -64,11 +82,13 @@ struct EeveeExperimentsSettingsView: View {
                         }
                     )
                 )
-                .disabled(!recorderAvailable)
+                .disabled(!recorderEnabled || !recorderAvailable)
 
-                Text(recorderStatus)
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
+                if recorderEnabled && !recorderStatus.isEmpty {
+                    Text(recorderStatus)
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
             }
 
             if !EeveeSpotify.isSpotify91OrNewer {
@@ -94,6 +114,8 @@ struct EeveeExperimentsSettingsView: View {
         }
         .listStyle(GroupedListStyle())
         .onAppear {
+            recorderEnabled = EeveeAudioRecorderEnabled()
+            recorderAvailable = recorderEnabled && EeveeAudioRecorderSupported()
             refreshRecorder()
         }
         .onReceive(NotificationCenter.default.publisher(
