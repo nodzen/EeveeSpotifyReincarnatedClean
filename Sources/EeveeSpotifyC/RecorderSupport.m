@@ -234,6 +234,7 @@ static void EVApplyExtra(EVTrackInfo *t) {
     NSString *xu = S(@"uri") ?: S(@"track_uri");
     BOOL uriMatch = xu.length && t.uri.length && [EVStableTrackKey(xu) isEqualToString:EVStableTrackKey(t.uri)];
     BOOL titleMatch = xt && t.title && [xt caseInsensitiveCompare:t.title] == NSOrderedSame;
+    BOOL hasTrackID = EVSpotifyTrackID(t.uri).length > 0;
     // Accept metadata when either identity matches; a differing MP external ID
     // (it is not always a track URI) must not throw away a matching title.
     if (xu.length && t.uri.length && !uriMatch && !titleMatch) return;
@@ -243,7 +244,10 @@ static void EVApplyExtra(EVTrackInfo *t) {
     if (S(@"albumArtist")) t.albumArtist = S(@"albumArtist");
     if (S(@"genre")) t.genre = S(@"genre");
     if (S(@"isrc")) t.isrc = S(@"isrc");
-    if (xu.length && (uriMatch || titleMatch || !t.uri.length)) t.uri = xu;
+    // MPNowPlayingInfoCenter's external ID is not always a Spotify track URI.
+    // Prefer the player's real URI whenever the current one cannot yield a
+    // track id, otherwise oEmbed has nothing to look up.
+    if (xu.length && (uriMatch || titleMatch || !t.uri.length || !hasTrackID)) t.uri = xu;
     NSString *img = S(@"image_url") ?: S(@"image_uri") ?: S(@"image") ?: S(@"cover_art") ?: S(@"cover") ?: S(@"artwork");
     NSString *abs = EVAbsoluteImageURL(img);
     if (abs) t.artworkURL = abs;
@@ -264,6 +268,7 @@ static void EVMergeInto(EVTrackInfo *dst, EVTrackInfo *src) {
     if (!dst.albumArtist) dst.albumArtist = src.albumArtist;
     if (!dst.isrc) dst.isrc = src.isrc;
     if (!dst.uri) dst.uri = src.uri;
+    else if (!EVSpotifyTrackID(dst.uri).length && EVSpotifyTrackID(src.uri).length) dst.uri = src.uri;
     if (!dst.trackNumber) dst.trackNumber = src.trackNumber;
     if (!dst.trackCount) dst.trackCount = src.trackCount;
     if (!dst.discNumber) dst.discNumber = src.discNumber;
@@ -283,14 +288,28 @@ static void evStoreArtwork(EVTrackInfo *t, NSData *jpg, NSString *source) {
     if (evMetaQ) dispatch_async(evMetaQ, store); else store();
 }
 
+static NSData *EVArtworkJPEG(id art) {
+    if (!art) return nil;
+    @try {
+        if ([art isKindOfClass:UIImage.class])
+            return UIImageJPEGRepresentation((UIImage *)art, 0.92);
+        if ([art isKindOfClass:NSData.class]) {
+            UIImage *img = [UIImage imageWithData:(NSData *)art];
+            return img ? UIImageJPEGRepresentation(img, 0.92) : nil;
+        }
+        if ([art respondsToSelector:@selector(imageWithSize:)]) {
+            UIImage *img = [(MPMediaItemArtwork *)art imageWithSize:CGSizeMake(1200, 1200)];
+            return img ? UIImageJPEGRepresentation(img, 0.92) : nil;
+        }
+    } @catch (NSException *e) { EVW("Meta", @"artwork exception: %@", e.reason); }
+    return nil;
+}
+
 static void evArtworkFromMediaItem(EVTrackInfo *t) {
     id art = t.artworkObject;
     if (!art) return;
     dispatch_async(dispatch_get_main_queue(), ^{
-        @try {
-            UIImage *img = [(MPMediaItemArtwork *)art imageWithSize:CGSizeMake(1200, 1200)];
-            evStoreArtwork(t, img ? UIImageJPEGRepresentation(img, 0.92) : nil, @"MPMediaItemArtwork");
-        } @catch (NSException *e) { EVW("Meta", @"artwork exception: %@", e.reason); }
+        evStoreArtwork(t, EVArtworkJPEG(art), @"MPMediaItemArtwork");
     });
 }
 
@@ -347,6 +366,42 @@ static void EVFetchArtwork(EVTrackInfo *t) {
             }
         }
     });
+}
+
+// Last chance for the cover: the player can be closed or the metadata hook can
+// miss the currently playing track while a download finalizes. Run one
+// synchronous lookup before writing the M4A so a missing async fetch cannot
+// leave the file without artwork.
+static NSData *EVArtworkFromMediaItemSync(EVTrackInfo *t) {
+    id art = t.artworkObject;
+    if (!art) return nil;
+    __block NSData *jpg = nil;
+    void (^read)(void) = ^{ jpg = EVArtworkJPEG(art); };
+    if (NSThread.isMainThread) read(); else dispatch_sync(dispatch_get_main_queue(), read);
+    return jpg;
+}
+
+static void EVFetchArtworkSync(EVTrackInfo *t) {
+    if (!t || t.artworkJPEG.length) return;
+    NSString *direct = EVAbsoluteImageURL(t.artworkURL);
+    NSString *trackID = EVSpotifyTrackID(t.uri);
+    NSData *jpg = direct.length ? EVDownloadJPEG(direct) : nil;
+    NSString *source = direct.length ? @"metadata URL" : nil;
+    if (!jpg.length && trackID.length) {
+        NSString *page = [@"https://open.spotify.com/track/" stringByAppendingString:trackID];
+        NSString *api = [@"https://open.spotify.com/oembed?url=" stringByAppendingString:EVPercentEncode(page)];
+        NSData *jsonData = [NSData dataWithContentsOfURL:[NSURL URLWithString:api] options:0 error:nil];
+        NSDictionary *json = jsonData ? [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:nil] : nil;
+        NSString *thumb = [json isKindOfClass:NSDictionary.class] ? EVStr(json[@"thumbnail_url"]) : nil;
+        if (thumb.length) { jpg = EVDownloadJPEG(thumb); source = @"Spotify oEmbed"; }
+    }
+    if (!jpg.length) { jpg = EVArtworkFromMediaItemSync(t); source = @"MPMediaItemArtwork"; }
+    if (jpg.length) {
+        t.artworkJPEG = jpg;
+        EVI("Meta", @"artwork %lu KB from last-chance %@ for '%@'", (unsigned long)jpg.length / 1024, source ?: @"?", t.title);
+    } else {
+        EVW("Meta", @"no cover available at finalize for '%@' (uri=%@)", t.title, t.uri ?: @"-");
+    }
 }
 
 static void evMetaPoll(void) {
@@ -425,7 +480,9 @@ void EVMetaStop(void) {
 
 NSArray<NSString *> *EVMetaDebugLines(void) {
     return @[@"== Metadata ==", [NSString stringWithFormat:@"now playing: %@%@", evLastNowPlayingNote, evWaitingForFreshStart ? @" | armed: waiting for a new track" : @""],
-             [NSString stringWithFormat:@"stream bitrate: %u bps | cover jpg: %d", EVStreamBitrate(), EVSaveArtworkFile()],
+             [NSString stringWithFormat:@"track URI: %@ | image URL: %@", evCurrent.uri ?: @"-", evCurrent.artworkURL ?: @"-"],
+             [NSString stringWithFormat:@"stream bitrate: %u bps | cover jpg file: %d | cover attached: %lu KB",
+              EVStreamBitrate(), EVSaveArtworkFile(), (unsigned long)(evCurrent.artworkJPEG.length / 1024)],
              [NSString stringWithFormat:@"latency offset: %ld ms | export formats: %@ | keep session wav: %d",
               (long)EVSettingInt(@"metaLatencyMs", 0), EVSettingString(@"exportFormats", @"(none)"), EVSettingBool(@"keepSession", NO)]];
 }
@@ -818,6 +875,7 @@ static void evRunFinalize(NSURL *wav, uint32_t rate, NSArray<EVMarker *> *marker
         NSString *werr = nil;
         if (!EVWriteSegment(wavOut, pcm, s, en - s, rate, info, comment, &werr)) { [errs addObject:werr]; continue; }
         [outFiles addObject:wavOut];
+        if (info && !info.artworkJPEG.length) EVFetchArtworkSync(info);
 
         NSMutableDictionary *side = [NSMutableDictionary dictionaryWithDictionary:info ? [info dictionary] : @{}];
         side[@"file"] = wavOut.lastPathComponent;

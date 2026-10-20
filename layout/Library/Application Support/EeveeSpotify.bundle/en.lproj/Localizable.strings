@@ -320,7 +320,6 @@ block_rating_prompts = "Block Rating Prompts";
 block_rating_prompts_description = "Suppresses the in-app App Store rating prompt. Restart Spotify after changing.";
 
 audio_recording = "Audio Recording";
-record_button = "Show Record Button";
 recording_storage_description = "Recordings are saved in Documents/Recordings. Downloaded tracks are saved as M4A in Documents. Cover art is embedded in the M4A; 'Save Cover as Separate File' also keeps a JPG. The download button is on the Now Playing screen.";
 recorder_unavailable_description = "Recording needs access to Spotify's audio render callback. This process does not expose it, so the recorder is disabled.";
 start_recording = "Start Recording";

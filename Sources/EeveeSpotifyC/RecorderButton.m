@@ -180,6 +180,7 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 @property (nonatomic, assign) BOOL downloadPending;
 @property (nonatomic, assign) BOOL started;
 @property (nonatomic, weak) UIButton *playerDownloadButton;
+@property (nonatomic, weak) UIViewController *playerVC;
 @property (nonatomic, assign) NSTimeInterval anchorMissingSince;
 @property (nonatomic, assign) NSUInteger candidateCount;
 @property (nonatomic, copy) NSString *hostDesc;
@@ -213,13 +214,9 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 - (void)start {
     if (self.started) return;
     self.started = YES;
-    _recordVisible = EeveeRecorderShowButton();
-    self.button = [[EVRecButton alloc] initWithFrame:CGRectMake(0, 0, 74.6667, 74.6667)];
-    [self.button addTarget:self action:@selector(tap) forControlEvents:UIControlEventTouchUpInside];
-    UILongPressGestureRecognizer *lp = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(longPressButton:)];
-    lp.minimumPressDuration = 0.8;
-    [self.button addGestureRecognizer:lp];
-    [self.button addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(pan:)]];
+    // The player download button replaces the old floating record control.
+    // Recording remains available from Settings.
+    _recordVisible = NO;
 
     NSNotificationCenter *nc = NSNotificationCenter.defaultCenter;
     [nc addObserver:self selector:@selector(reconcile) name:EeveeRecorderStateDidChangeNotification object:nil];
@@ -443,6 +440,10 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
     BOOL busy = self.downloadPending || EeveeAudioRecorderIsRecording();
     self.playerDownloadButton.enabled = !busy;
     self.playerDownloadButton.alpha = busy ? 0.4 : 1.0;
+    // The button lives on the window so it cannot scroll with the player.
+    // Hide it while the player presents a sheet (share, menu, etc.).
+    UIViewController *presented = self.playerVC.presentedViewController;
+    self.playerDownloadButton.hidden = presented && !presented.isBeingDismissed;
 }
 
 - (void)tapDownload {
@@ -615,13 +616,19 @@ static char kEVPlayerDownloadButtonKey;
 static void evPlacePlayerDownloadButton(UIViewController *vc) {
     UIButton *b = objc_getAssociatedObject(vc, &kEVPlayerDownloadButtonKey);
     if (!b || !vc.isViewLoaded) return;
+    // Attach to the window, not the scrolling controller's view. The button
+    // stays put while the Now Playing content scrolls underneath it.
     UIView *v = vc.view;
-    if (b.superview != v) [v addSubview:b];
-    [v bringSubviewToFront:b];
-    CGFloat size = 40, top = v.safeAreaInsets.top;
-    if (top <= 0) top = v.window.safeAreaInsets.top;
+    UIView *host = v.window ?: v;
+    if (b.superview != host) {
+        [b removeFromSuperview];
+        [host addSubview:b];
+    }
+    [host bringSubviewToFront:b];
+    CGFloat size = 40, top = host.safeAreaInsets.top;
+    if (top <= 0) top = v.safeAreaInsets.top;
     // The top-right corner belongs to Spotify's "..." menu; sit just left of it.
-    CGFloat x = v.bounds.size.width - 16 - 44 - size;
+    CGFloat x = host.bounds.size.width - 16 - 44 - size;
     b.frame = CGRectMake(MAX(16, x), top + 6, size, size);
 }
 
@@ -639,17 +646,19 @@ static void evInstallPlayerDownloadButton(UIViewController *vc) {
         b.clipsToBounds = YES;
         b.accessibilityLabel = @"Download current track";
         [b addTarget:[EVRecUI shared] action:@selector(tapDownload) forControlEvents:UIControlEventTouchUpInside];
+        UILongPressGestureRecognizer *lp = [[UILongPressGestureRecognizer alloc] initWithTarget:[EVRecUI shared] action:@selector(longPressButton:)];
+        lp.minimumPressDuration = 1.0;
+        [b addGestureRecognizer:lp];
         objc_setAssociatedObject(vc, &kEVPlayerDownloadButtonKey, b, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         EVI("UI", @"download button added to %@", NSStringFromClass(vc.class));
     }
-    if (b.superview != vc.view) [vc.view addSubview:b];
-    [vc.view bringSubviewToFront:b];
     [EVRecUI shared].playerDownloadButton = b;
+    [EVRecUI shared].playerVC = vc;
     [[EVRecUI shared] refreshDownloadButton];
     evPlacePlayerDownloadButton(vc);
 }
 
-static IMP evOrigPlayerDidAppear, evOrigPlayerDidLayout;
+static IMP evOrigPlayerDidAppear, evOrigPlayerDidLayout, evOrigPlayerWillDisappear;
 static BOOL evPlayerHookInstalled;
 
 static void evPlayerDidAppear(UIViewController *self, SEL _cmd, BOOL animated) {
@@ -664,6 +673,12 @@ static void evPlayerDidLayout(UIViewController *self, SEL _cmd) {
     evInstallPlayerDownloadButton(self);
 }
 
+static void evPlayerWillDisappear(UIViewController *self, SEL _cmd, BOOL animated) {
+    if (evOrigPlayerWillDisappear) ((void (*)(id, SEL, BOOL))evOrigPlayerWillDisappear)(self, _cmd, animated);
+    UIButton *b = objc_getAssociatedObject(self, &kEVPlayerDownloadButtonKey);
+    [b removeFromSuperview];
+}
+
 static void evInstallPlayerButtonHook(int attempt) {
     if (evPlayerHookInstalled) return;
     Class cls = NSClassFromString(@"NowPlaying_ScrollImpl.NPVScrollViewController");
@@ -676,6 +691,7 @@ static void evInstallPlayerButtonHook(int attempt) {
     }
     Method appear = class_getInstanceMethod(cls, @selector(viewDidAppear:));
     Method layout = class_getInstanceMethod(cls, @selector(viewDidLayoutSubviews));
+    Method disappear = class_getInstanceMethod(cls, @selector(viewWillDisappear:));
     if (!appear || !layout) {
         EVW("UI", @"NPVScrollViewController is missing lifecycle methods; no player download button");
         return;
@@ -684,6 +700,10 @@ static void evInstallPlayerButtonHook(int attempt) {
     evOrigPlayerDidLayout = method_getImplementation(layout);
     class_replaceMethod(cls, @selector(viewDidAppear:), (IMP)evPlayerDidAppear, method_getTypeEncoding(appear));
     class_replaceMethod(cls, @selector(viewDidLayoutSubviews), (IMP)evPlayerDidLayout, method_getTypeEncoding(layout));
+    if (disappear) {
+        evOrigPlayerWillDisappear = method_getImplementation(disappear);
+        class_replaceMethod(cls, @selector(viewWillDisappear:), (IMP)evPlayerWillDisappear, method_getTypeEncoding(disappear));
+    }
     evPlayerHookInstalled = YES;
     EVI("UI", @"hooked NPVScrollViewController for the player download button");
 }

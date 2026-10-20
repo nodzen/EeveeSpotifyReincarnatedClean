@@ -8,7 +8,6 @@ struct EeveeMiscellaneousSettingsView: View {
     @State private var isRecording: Bool = EeveeAudioRecorderIsRecording()
     @State private var recorderStatus: String = EeveeRecorderStatusLine() ?? ""
     @State private var recorderAvailable: Bool = EeveeAudioRecorderSupported()
-    @State private var showRecordButton: Bool = EeveeRecorderShowButton()
     @State private var saveArtwork: Bool = EeveeRecorderSaveArtwork()
 
     private func refreshRecorder() {
@@ -48,18 +47,6 @@ struct EeveeMiscellaneousSettingsView: View {
                     ? "recording_storage_description".localized
                     : "recorder_unavailable_description".localized)
             ) {
-                Toggle(
-                    "record_button".localized,
-                    isOn: Binding<Bool>(
-                        get: { showRecordButton },
-                        set: {
-                            showRecordButton = $0
-                            EeveeRecorderSetShowButton($0)
-                        }
-                    )
-                )
-                .disabled(!recorderAvailable)
-
                 Button {
                     if isRecording {
                         EeveeAudioRecorderStop()

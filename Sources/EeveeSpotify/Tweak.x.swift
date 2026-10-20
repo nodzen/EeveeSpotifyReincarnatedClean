@@ -37,6 +37,24 @@ struct IOS14And15PremiumPatchingGroup: HookGroup { }
 struct V91PremiumPatchingGroup: HookGroup { } // For Spotify 9.1.x versions
 struct LatestPremiumPatchingGroup: HookGroup { }
 
+/// The lyrics metadata hook is only called while Spotify renders certain
+/// player surfaces. Poll the stateful player directly so the recorder always
+/// has the current URI/title/artist/image_url, even when no lyrics view asks
+/// for metadata. One second is enough for track changes and costs nothing.
+private var recorderTrackTimer: Timer?
+private func startRecorderTrackTimer() {
+    guard recorderTrackTimer == nil else { return }
+    recorderTrackTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+        guard EeveeAudioRecorderSupported(), let track = statefulPlayer?.currentTrack() else { return }
+        var meta = track.metadata()
+        let trackID = track.trackIdentifier
+        if !trackID.isEmpty { meta["uri"] = "spotify:track:\(trackID)" }
+        if (meta["title"] ?? "").isEmpty { meta["title"] = track.trackTitle() }
+        if (meta["artist"] ?? "").isEmpty { meta["artist"] = track.artistName() }
+        EeveeRecorderSetExtraMetadata(meta)
+    }
+}
+
 // Spotify 9.1.x originally removed the offline helper, so this version family
 // skipped the reminder hook entirely. Newer 9.1 builds expose the modern helper
 // again. Activate only that hook when its exact Objective-C entry point exists.
@@ -278,6 +296,8 @@ struct EeveeSpotify: Tweak {
         }
 
         configureCommon()
+        if Thread.isMainThread { startRecorderTrackTimer() }
+        else { DispatchQueue.main.async { startRecorderTrackTimer() } }
 
         // Version split: each Spotify family gets its own configuration.
         // Mapping lives in VersionHookTarget / hookTarget above.
