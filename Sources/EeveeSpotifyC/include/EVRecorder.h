@@ -35,6 +35,9 @@ NSString *EeveeRecorderStatusLine(void);              // short text for a settin
 void EeveeRecorderSetExtraMetadata(NSDictionary *md); // title, artist, album, albumArtist, genre, trackNumber, discNumber, year, uri, isrc
 BOOL EeveeRecorderSaveArtwork(void);                  // keep a separate JPG next to the M4A
 void EeveeRecorderSetSaveArtwork(BOOL save);
+BOOL EeveeRecorderEmbedLyrics(void);                  // write cached Genius lyrics into the M4A
+void EeveeRecorderSetEmbedLyrics(BOOL embed);
+void EeveeRecorderSetLyrics(NSString *lyrics, NSString *uri, NSString *title, NSString *artist);
 NSString *EeveeRecorderDebugReport(void);             // main thread only
 void EeveeRecorderPresentDebugPanel(void);            // main thread only
 

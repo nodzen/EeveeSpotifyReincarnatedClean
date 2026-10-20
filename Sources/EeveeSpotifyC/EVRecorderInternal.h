@@ -50,6 +50,7 @@ NSString *EVCoreActiveSessionPath(void);
 @interface EVTrackInfo : NSObject
 @property (nonatomic, copy) NSString *key, *title, *artist, *album, *albumArtist, *genre, *uri, *isrc;
 @property (nonatomic, copy) NSString *artworkURL;
+@property (nonatomic, copy) NSString *lyrics;
 @property (nonatomic) NSInteger trackNumber, trackCount, discNumber, year;
 @property (nonatomic) uint32_t bitrate;
 @property (nonatomic) double duration, elapsed;
@@ -70,6 +71,7 @@ typedef void (^EVTrackChangeBlock)(EVTrackInfo *info, uint64_t frame, BOOL parti
 void EVMetaStart(EVTrackChangeBlock block);
 void EVMetaStop(void);
 NSArray<NSString *> *EVMetaDebugLines(void);
+NSString *EVLyricsForTrackInfo(EVTrackInfo *info);
 
 typedef void (^EVFinalizeDone)(NSArray<NSURL *> *files, NSURL *folder, NSArray<NSDictionary *> *tracks, NSString *errorText);
 void EVFinalizeSession(NSURL *sessionWav, uint32_t rate, NSArray<EVMarker *> *markers, uint64_t totalFrames, EVFinalizeDone done);

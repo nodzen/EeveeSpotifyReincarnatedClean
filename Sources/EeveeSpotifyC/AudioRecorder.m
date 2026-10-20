@@ -59,6 +59,15 @@ NSString *const EeveeRecorderDidFinishNotification = @"EeveeRecorderDidFinishNot
 #define WAV_MAX_BYTES 0xFFFFF000ull
 #define MIN_FREE_BYTES (300ull * 1024 * 1024)
 
+// Linear resampling keeps one WAV timeline when the output route changes
+// (44.1 kHz <-> 48 kHz). It is deliberately simple: route changes are rare and
+// an AudioConverter would add allocations/locks to the realtime callback.
+// ponytail: linear interpolation; upgrade to AudioConverter if artifacts matter.
+typedef struct EVResampler {
+    double pos;
+    float lastL, lastR;
+} EVResampler;
+
 typedef OSStatus (*RenderFunction)(AudioUnit, AudioUnitRenderActionFlags *, const AudioTimeStamp *,
                                    UInt32, UInt32, AudioBufferList *);
 typedef void (*MSHookFunctionType)(void *symbol, void *replace, void **result);
@@ -74,12 +83,14 @@ static pthread_mutex_t ctlLock = PTHREAD_MUTEX_INITIALIZER;
 
 static float ring[RING_SAMPLES];
 static _Atomic(uint64_t) writeIndex, readIndex;
-static _Atomic(bool) capturing, sessionActive, formatReady, abortFlag;
+static _Atomic(bool) capturing, sessionActive, formatReady;
 static _Atomic(bool) downloadMode;
 static _Atomic(uint64_t) downloadGeneration;
 static NSString *downloadKey;
 static _Atomic(uint32_t) sampleRate = 44100, fmtChannels, fmtBits, mismatchRate;
 static _Atomic(bool) fmtIsFloat;
+static _Atomic(uint32_t) inputRate;
+static EVResampler inlineResampler;
 static _Atomic(uint64_t) framesCaptured, statCalls, statMatched, statCaptured, statDropped, statBadLayout;
 static _Atomic(uint32_t) peakBits;
 static _Atomic(uintptr_t) callerStart, callerEnd, lastRejectedCaller;
@@ -116,6 +127,7 @@ typedef struct EVTapContext {
     uint32_t rate;
     uint32_t channels;
     bool rateProbed;
+    EVResampler resampler;
 } EVTapContext;
 
 static AudioUnitSetPropertyFn originalSetProperty;
@@ -245,19 +257,23 @@ static void inspectFormat(AudioUnit unit) {
         atomic_store(&fmtBits, asbd.mBitsPerChannel);
         atomic_store(&fmtIsFloat, isFloat);
         atomic_store(&sampleRate, (uint32_t)asbd.mSampleRate);
+        atomic_store(&inputRate, (uint32_t)asbd.mSampleRate);
         atomic_store_explicit(&formatReady, true, memory_order_release);
     }
 }
 
-// A changed sample rate (e.g. Bluetooth connected) would corrupt timing, so it aborts the session.
+// A changed sample rate (Bluetooth/route switch) is resampled into the
+// session's original rate instead of aborting the recording. Keeping one
+// timeline is more useful than losing the rest of the track.
 static void recheckRate(AudioUnit unit) {
     AudioStreamBasicDescription asbd = {0};
     OSStatus st;
     if (!readASBD(unit, &asbd, &st)) return;
     uint32_t r = (uint32_t)asbd.mSampleRate;
-    if (r && r != atomic_load_explicit(&sampleRate, memory_order_relaxed)) {
-        atomic_store(&mismatchRate, r);
-        atomic_store(&abortFlag, true);
+    if (r >= 8000 && r <= 192000) {
+        uint32_t old = atomic_exchange(&inputRate, r);
+        if (r != atomic_load_explicit(&sampleRate, memory_order_relaxed)) atomic_store(&mismatchRate, r);
+        if (old && old != r) EVI("Tap", @"input rate changed %u -> %u Hz (resampling)", old, r);
     }
 }
 
@@ -290,12 +306,57 @@ static inline float readSample(const void *base, uint32_t index, bool isFloat) {
     return ((const int16_t *)base)[index] * (1.0f / 32768.0f);
 }
 
-static void captureBuffers(AudioBufferList *list, UInt32 frames) {
+// Returns the number of destination frames actually pushed into the ring.
+static uint32_t pushResampled(const float *src, uint32_t frames, uint32_t srcRate,
+                              uint32_t dstRate, EVResampler *rs) {
+    if (!src || !frames) return 0;
+    if (!rs || !srcRate || !dstRate || srcRate == dstRate) {
+        if (rs) {
+            rs->pos = 0;
+            rs->lastL = src[(frames - 1) * 2];
+            rs->lastR = src[(frames - 1) * 2 + 1];
+        }
+        return pushSamples(src, frames * 2) ? frames : 0;
+    }
+    double step = (double)srcRate / (double)dstRate;
+    if (!(step > 0) || !isfinite(step)) step = 1.0;
+    float out[WRITE_CHUNK];
+    uint32_t pushed = 0;
+    for (;;) {
+        uint32_t outFrames = 0;
+        while (outFrames < WRITE_CHUNK / 2) {
+            int idx = (int)floor(rs->pos);
+            if (idx + 1 >= (int)frames) break;
+            double frac = rs->pos - (double)idx;
+            float l0, r0, l1, r1;
+            if (idx < 0) {
+                l0 = rs->lastL; r0 = rs->lastR; l1 = src[0]; r1 = src[1];
+            } else {
+                l0 = src[idx * 2]; r0 = src[idx * 2 + 1];
+                l1 = src[(idx + 1) * 2]; r1 = src[(idx + 1) * 2 + 1];
+            }
+            out[outFrames * 2] = (float)(l0 + (l1 - l0) * frac);
+            out[outFrames * 2 + 1] = (float)(r0 + (r1 - r0) * frac);
+            outFrames++;
+            rs->pos += step;
+        }
+        if (outFrames && pushSamples(out, outFrames * 2)) pushed += outFrames;
+        if (outFrames == 0) break;
+        if (rs->pos + 1.0 >= (double)frames) break;
+    }
+    rs->lastL = src[(frames - 1) * 2];
+    rs->lastR = src[(frames - 1) * 2 + 1];
+    rs->pos -= frames;
+    return pushed;
+}
+
+static void captureBuffers(AudioBufferList *list, UInt32 frames, uint32_t srcRate, EVResampler *resampler) {
     if (!list || !frames || list->mNumberBuffers < 1) return;
     uint32_t bits = atomic_load_explicit(&fmtBits, memory_order_relaxed);
     bool isFloat = atomic_load_explicit(&fmtIsFloat, memory_order_relaxed);
     uint32_t bytesPer = bits / 8;
     if (!bytesPer) return;
+    uint32_t dstRate = atomic_load_explicit(&sampleRate, memory_order_relaxed);
 
     const void *left = NULL, *right = NULL;
     uint32_t stride = 1, available = 0;
@@ -325,8 +386,8 @@ static void captureBuffers(AudioBufferList *list, UInt32 frames) {
             temp[i * 2] = readSample(left, idx, isFloat);
             temp[i * 2 + 1] = readSample(right, idx, isFloat);
         }
-        if (pushSamples(temp, batch * 2))
-            atomic_fetch_add_explicit(&framesCaptured, batch, memory_order_relaxed);
+        uint32_t pushed = pushResampled(temp, batch, srcRate, dstRate, resampler);
+        if (pushed) atomic_fetch_add_explicit(&framesCaptured, pushed, memory_order_relaxed);
         i0 += batch; frames -= batch;
     }
     atomic_fetch_add_explicit(&statCaptured, 1, memory_order_relaxed);
@@ -351,6 +412,22 @@ static void evTapProbeFormat(EVTapContext *ctx, bool final) {
     }
 }
 
+// Spotify can change the unit format without replacing the callback (usually
+// when a Bluetooth route connects). Re-read it occasionally; the resampler
+// below keeps the file at the session rate.
+static void evTapRefreshRate(EVTapContext *ctx) {
+    if (!ctx) return;
+    AudioStreamBasicDescription asbd = {0};
+    UInt32 size = sizeof(asbd);
+    if (AudioUnitGetProperty(ctx->unit, kAudioUnitProperty_StreamFormat,
+                             ctx->scope, ctx->element, &asbd, &size) != noErr) return;
+    uint32_t rate = (uint32_t)asbd.mSampleRate;
+    if (rate < 8000 || rate > 192000 || rate == ctx->rate) return;
+    EVI("Tap", @"input rate changed %u -> %u Hz", ctx->rate, rate);
+    ctx->rate = rate;
+    atomic_store(&tapRate, rate);
+}
+
 // Wraps Spotify's render callback without touching its code. The original
 // callback fills ioData (float32, interleaved); we copy it afterwards.
 static OSStatus evTapRender(void *refCon, AudioUnitRenderActionFlags *flags, const AudioTimeStamp *time,
@@ -366,16 +443,17 @@ static OSStatus evTapRender(void *refCon, AudioUnitRenderActionFlags *flags, con
         !atomic_load_explicit(&sessionActive, memory_order_relaxed)) return status;
 
     evTapProbeFormat(ctx, true);
-    if (ctx->rate) {
-        uint32_t current = atomic_load_explicit(&sampleRate, memory_order_relaxed);
-        if (current && current != ctx->rate) {
-            if (atomic_load_explicit(&framesCaptured, memory_order_relaxed) == 0) {
-                atomic_store_explicit(&sampleRate, ctx->rate, memory_order_relaxed);
-            } else {
-                atomic_store(&mismatchRate, ctx->rate);
-                atomic_store(&abortFlag, true);
-                return status;
-            }
+    if ((atomic_load_explicit(&tapCallbackCount, memory_order_relaxed) & 511) == 511)
+        evTapRefreshRate(ctx);
+    uint32_t srcRate = ctx->rate;
+    uint32_t sessionRate = atomic_load_explicit(&sampleRate, memory_order_relaxed);
+    if (srcRate && sessionRate && srcRate != sessionRate) {
+        if (atomic_load_explicit(&framesCaptured, memory_order_relaxed) == 0) {
+            atomic_store_explicit(&sampleRate, srcRate, memory_order_relaxed);
+            sessionRate = srcRate;
+        } else {
+            uint32_t old = atomic_exchange(&mismatchRate, srcRate);
+            if (old != srcRate) EVI("Tap", @"resampling %u -> %u Hz", srcRate, sessionRate);
         }
     }
     if (!atomic_load_explicit(&formatReady, memory_order_acquire)) {
@@ -389,7 +467,7 @@ static OSStatus evTapRender(void *refCon, AudioUnitRenderActionFlags *flags, con
             atomic_store_explicit(&fmtChannels, channels, memory_order_relaxed);
         if (data->mBuffers[0].mDataByteSize && frames) {
             atomic_fetch_add_explicit(&statMatched, 1, memory_order_relaxed);
-            captureBuffers(data, frames);
+            captureBuffers(data, frames, srcRate ? srcRate : sessionRate, &ctx->resampler);
         }
     }
     return status;
@@ -522,7 +600,8 @@ static OSStatus hookedRender(AudioUnit unit, AudioUnitRenderActionFlags *flags, 
             inspectFormat(unit);
             if (atomic_load_explicit(&formatReady, memory_order_acquire)) {
                 if ((n & 511) == 511) recheckRate(unit);
-                captureBuffers(data, frames);
+                uint32_t srcRate = atomic_load_explicit(&inputRate, memory_order_relaxed);
+                captureBuffers(data, frames, srcRate ? srcRate : EVCoreSampleRate(), &inlineResampler);
             }
         } else {
             atomic_store_explicit(&lastRejectedCaller, caller, memory_order_relaxed);
@@ -683,6 +762,42 @@ static NSString *evTrackKey(EVTrackInfo *info) {
 // Download = one track, from the beginning, stopped automatically. The first
 // marker is the track we restarted; the next different track (or the expected
 // duration, if playback just stops) ends the capture.
+// Downloads stop on captured duration, not on wall time: if Spotify takes a
+// moment to resume after the rewind, the end of the track must still fit in
+// the file. The wall-clock deadline only guards against a stalled player.
+static void evDownloadWatch(uint64_t gen, double expected, uint64_t startedMs,
+                            uint64_t prevFrames, uint64_t lastProgressMs) {
+    if (!atomic_load(&downloadMode) || atomic_load(&downloadGeneration) != gen) return;
+    uint64_t now = evNowMs();
+    uint64_t frames = EVCoreFramesCaptured();
+    uint32_t rate = EVCoreSampleRate() ? EVCoreSampleRate() : 44100;
+    double captured = (double)frames / rate;
+    double target = expected > 0 ? expected + 2.5 : 600.0;
+    if (frames > prevFrames) lastProgressMs = now;
+
+    if (captured >= target) {
+        EVI("Download", @"captured %.1fs (target %.1fs); stopping", captured, target);
+        EeveeAudioRecorderStop();
+        return;
+    }
+    if (frames < rate / 2 && now - lastProgressMs > 15000) {
+        setLastError(@"Playback did not produce audio after the rewind. Try pressing play, then download again.");
+        EVE("Download", @"no audio frames for 15 s; stopping");
+        EeveeAudioRecorderStop();
+        return;
+    }
+    if (now - startedMs > (uint64_t)((target + 90.0) * 1000)) {
+        setLastError([NSString stringWithFormat:@"Download timed out after %.0fs (captured %.1fs).", (now - startedMs) / 1000.0, captured]);
+        EVE("Download", @"timeout after %.0fs, captured %.1fs", (now - startedMs) / 1000.0, captured);
+        EeveeAudioRecorderStop();
+        return;
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
+                   dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        evDownloadWatch(gen, expected, startedMs, frames, lastProgressMs);
+    });
+}
+
 static void evDownloadMarker(EVTrackInfo *info) {
     if (!atomic_load(&downloadMode)) return;
     NSString *key = evTrackKey(info);
@@ -695,12 +810,11 @@ static void evDownloadMarker(EVTrackInfo *info) {
     if (first || next) gen = atomic_fetch_add(&downloadGeneration, 1) + 1;
     if (first) {
         double d = info.duration > 0 ? info.duration : 0;
-        int64_t delayNs = (int64_t)((d > 0 ? d + 2.5 : 600.0) * NSEC_PER_SEC);
+        uint64_t now = evNowMs();
         EVI("Download", @"capturing '%@' (expected %.1fs)", info.title, d);
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delayNs),
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
                        dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-            if (atomic_load(&downloadMode) && atomic_load(&downloadGeneration) == gen)
-                EeveeAudioRecorderStop();
+            evDownloadWatch(gen, d, now, 0, now);
         });
     } else if (next) {
         EVI("Download", @"next track started; stopping");
@@ -708,10 +822,15 @@ static void evDownloadMarker(EVTrackInfo *info) {
             if (atomic_load(&downloadMode)) EeveeAudioRecorderStop();
         });
     }
-    (void)gen;
 }
 
 static void evOnTrack(EVTrackInfo *info, uint64_t frame, BOOL partial) {
+    if (info && !info.lyrics.length) {
+        // RecorderSupport owns the lyrics cache; expose it through a small
+        // helper so the marker is tagged even if the Swift fetch finished
+        // between metadata polls.
+        info.lyrics = EVLyricsForTrackInfo(info);
+    }
     EVMarker *m = [EVMarker new];
     m.frame = frame; m.info = info; m.partialStart = partial;
     @synchronized(evSync()) { [markers addObject:m]; }
@@ -768,15 +887,6 @@ static void *writerMain(void *unused) {
         }
 
         uint64_t now = evNowMs();
-        if (atomic_load(&abortFlag) && !abortHandled) {
-            abortHandled = true;
-            uint32_t nr = atomic_load(&mismatchRate);
-            setLastError([NSString stringWithFormat:@"Sample rate changed %u -> %u Hz mid-recording (output route changed?). Recording stopped; the audio so far is saved.",
-                          EVCoreSampleRate(), nr]);
-            EVE("Writer", @"sample rate changed %u -> %u - stopping", EVCoreSampleRate(), nr);
-            atomic_store(&capturing, false);
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ EeveeAudioRecorderStop(); });
-        }
         if (now - lastCaller >= 500) { lastCaller = now; refreshCallerRange(); }
         if (now - lastHdr >= 2000) { lastHdr = now; writeWAVHeader(outputFile, EVCoreSampleRate(), written); }  // file stays playable after a crash
         if (now - lastStat >= 2000) {
@@ -859,7 +969,8 @@ static BOOL evStartLocked(void) {
     outputPath = wav.path; outputFile = f; writtenFramesTotal = 0;
     @synchronized(evSync()) { markers = [NSMutableArray array]; }
     atomic_store(&writeIndex, 0); atomic_store(&readIndex, 0);
-    atomic_store(&abortFlag, false);
+    atomic_store(&inputRate, startRate);
+    memset(&inlineResampler, 0, sizeof(inlineResampler));
     if (tapMode) {
         uint32_t channels = atomic_load(&tapChannels);
         atomic_store(&sampleRate, startRate);
@@ -904,6 +1015,61 @@ BOOL EeveeAudioRecorderStart(void) {
     return ok;
 }
 
+// Pause -> wait for the rewind to land -> start capture -> play. Playback
+// commands on the old controller are asynchronous inside Spotify, so a fixed
+// sleep can resume before the seek is applied; the result is a stalled player
+// with the UI pretending to play. Wait for the position, then verify resume.
+static void evDownloadPlay(int attempt);
+
+static void evDownloadPlay(int attempt) {
+    if (!atomic_load(&downloadMode)) return;
+    if (!EeveePlaybackAvailable()) return;
+    EeveePlaybackPlay();
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (!atomic_load(&downloadMode)) return;
+        if (EeveePlaybackAvailable() && EeveePlaybackIsPaused() && attempt < 3) {
+            EVI("Download", @"still paused after play (attempt %d); retrying", attempt + 1);
+            evDownloadPlay(attempt + 1);
+            return;
+        }
+        // A player that reports "playing" but renders no frames needs the
+        // pause/play kick users do by hand.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.7 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (!atomic_load(&downloadMode)) return;
+            uint32_t rate = EVCoreSampleRate() ? EVCoreSampleRate() : 44100;
+            if (EVCoreFramesCaptured() < rate / 4 && attempt < 3) {
+                EVI("Download", @"no audio frames yet (attempt %d); toggling pause/play", attempt + 1);
+                EeveePlaybackPause();
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    if (atomic_load(&downloadMode)) evDownloadPlay(attempt + 1);
+                });
+            }
+        });
+    });
+}
+
+static void evDownloadWaitForRewind(int ticks) {
+    if (!atomic_load(&downloadMode)) return;
+    double elapsed = EeveePlaybackElapsed();
+    if (elapsed > 1.0 && ticks < 50) {
+        if (ticks == 0) EVI("Download", @"waiting for rewind (elapsed %.2fs)", elapsed);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            evDownloadWaitForRewind(ticks + 1);
+        });
+        return;
+    }
+    if (elapsed > 1.0) EVW("Download", @"rewind not confirmed (elapsed %.2fs); continuing", elapsed);
+    if (!EeveeAudioRecorderStart()) {
+        atomic_store(&downloadMode, false);
+        @synchronized(evSync()) { downloadKey = nil; }
+        EeveePlaybackPlay();
+        return;
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        evDownloadPlay(0);
+    });
+}
+
 BOOL EeveeAudioRecorderDownloadCurrentTrack(void) {
     if (EeveeAudioRecorderIsRecording()) {
         setLastError(@"A recording is already running.");
@@ -921,22 +1087,13 @@ BOOL EeveeAudioRecorderDownloadCurrentTrack(void) {
     atomic_store(&downloadGeneration, 0);
     atomic_store(&downloadMode, true);
 
-    // Pause -> rewind -> start capture -> play. Capturing before playback
-    // resumes keeps the marker at frame 0 instead of a partial first segment.
     dispatch_async(dispatch_get_main_queue(), ^{
         EeveePlaybackPause();
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (!atomic_load(&downloadMode)) return;
             EeveePlaybackSeekToStart();
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.30 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                if (!EeveeAudioRecorderStart()) {
-                    atomic_store(&downloadMode, false);
-                    @synchronized(evSync()) { downloadKey = nil; }
-                    EeveePlaybackPlay();
-                    return;
-                }
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.20 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    EeveePlaybackPlay();
-                });
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                evDownloadWaitForRewind(0);
             });
         });
     });

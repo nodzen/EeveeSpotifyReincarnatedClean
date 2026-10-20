@@ -8,6 +8,8 @@ extern "C" {
 #endif
 
 BOOL EeveePlaybackAvailable(void);        // controller captured?
+BOOL EeveePlaybackIsPaused(void);         // synchronous, safe from any thread
+double EeveePlaybackElapsed(void);        // seconds from MPNowPlayingInfo, 0 if unknown
 BOOL EeveePlaybackPlay(void);
 BOOL EeveePlaybackPause(void);
 BOOL EeveePlaybackTogglePause(void);

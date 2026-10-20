@@ -11,6 +11,7 @@
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
+#import <MediaPlayer/MediaPlayer.h>
 #import "include/EVPlayback.h"
 
 static NSString *const kControllerClass = @"SPTNowPlayingPlaybackControllerImplementation";
@@ -109,6 +110,22 @@ static BOOL evCallBool(id c, const char *selName, BOOL v) {
 }
 
 BOOL EeveePlaybackAvailable(void) { return sController != nil; }
+BOOL EeveePlaybackIsPaused(void) {
+    __block BOOL paused = NO;
+    void (^read)(void) = ^{
+        id c = sController;
+        if (!c) return;
+        SEL s = sel_registerName("isPaused");
+        if ([c respondsToSelector:s]) paused = ((BOOL (*)(id, SEL))objc_msgSend)(c, s);
+    };
+    if ([NSThread isMainThread]) read(); else dispatch_sync(dispatch_get_main_queue(), read);
+    return paused;
+}
+double EeveePlaybackElapsed(void) {
+    NSDictionary *info = MPNowPlayingInfoCenter.defaultCenter.nowPlayingInfo;
+    NSNumber *elapsed = info[MPNowPlayingInfoPropertyElapsedPlaybackTime];
+    return elapsed ? elapsed.doubleValue : 0.0;
+}
 BOOL EeveePlaybackPlay(void) { return evRun(@"play", ^(id c) { evCallBool(c, "setPaused:", NO); }); }
 BOOL EeveePlaybackPause(void) { return evRun(@"pause", ^(id c) { evCallBool(c, "setPaused:", YES); }); }
 BOOL EeveePlaybackTogglePause(void) {

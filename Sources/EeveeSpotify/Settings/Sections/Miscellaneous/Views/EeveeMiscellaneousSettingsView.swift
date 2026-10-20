@@ -1,19 +1,9 @@
 import SwiftUI
 import UIKit
-import EeveeSpotifyC
 
 struct EeveeMiscellaneousSettingsView: View {
     @State var blockSpotifyAnalytics = UserDefaults.blockSpotifyAnalytics
     @State var blockRatingPrompts = UserDefaults.blockRatingPrompts
-    @State private var isRecording: Bool = EeveeAudioRecorderIsRecording()
-    @State private var recorderStatus: String = EeveeRecorderStatusLine() ?? ""
-    @State private var recorderAvailable: Bool = EeveeAudioRecorderSupported()
-    @State private var saveArtwork: Bool = EeveeRecorderSaveArtwork()
-
-    private func refreshRecorder() {
-        isRecording = EeveeAudioRecorderIsRecording()
-        recorderStatus = EeveeRecorderStatusLine() ?? ""
-    }
 
     var body: some View {
         List {
@@ -41,48 +31,6 @@ struct EeveeMiscellaneousSettingsView: View {
                 )
             }
 
-            Section(
-                header: Text("audio_recording".localized),
-                footer: Text(recorderAvailable
-                    ? "recording_storage_description".localized
-                    : "recorder_unavailable_description".localized)
-            ) {
-                Button {
-                    if isRecording {
-                        EeveeAudioRecorderStop()
-                    } else {
-                        _ = EeveeAudioRecorderStart()
-                    }
-                    // State notification is posted on the main thread, but the
-                    // split/finalize step can take a moment; refresh now for the
-                    // common case and again when the notification arrives.
-                    refreshRecorder()
-                } label: {
-                    HStack {
-                        Image(systemName: isRecording ? "stop.circle.fill" : "record.circle")
-                            .foregroundColor(isRecording ? .red : .accentColor)
-                        Text(isRecording ? "stop_recording".localized : "start_recording".localized)
-                    }
-                }
-                .disabled(!recorderAvailable)
-
-                Toggle(
-                    "save_artwork".localized,
-                    isOn: Binding<Bool>(
-                        get: { saveArtwork },
-                        set: {
-                            saveArtwork = $0
-                            EeveeRecorderSetSaveArtwork($0)
-                        }
-                    )
-                )
-                .disabled(!recorderAvailable)
-
-                Text(recorderStatus)
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-            }
-
             Section(footer: Text("livecontainer_sharing_description".localized)) {
                 Toggle(
                     "livecontainer_sharing".localized,
@@ -107,17 +55,6 @@ struct EeveeMiscellaneousSettingsView: View {
             }
         }
         .listStyle(GroupedListStyle())
-        .onAppear {
-            refreshRecorder()
-        }
-        .onReceive(NotificationCenter.default.publisher(
-            for: .EeveeRecorderStateDidChange)) { _ in
-            refreshRecorder()
-        }
-        .onReceive(NotificationCenter.default.publisher(
-            for: .EeveeRecorderDidFinish)) { _ in
-            refreshRecorder()
-        }
         .onChange(of: blockSpotifyAnalytics) { enabled in
             UserDefaults.blockSpotifyAnalytics = enabled
         }

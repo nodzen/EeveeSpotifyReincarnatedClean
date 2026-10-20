@@ -112,6 +112,8 @@ void EVSetSettingString(NSString *k, NSString *v) { [[NSUserDefaults standardUse
 BOOL EVSaveArtworkFile(void) { return EVSettingBool(@"saveArtwork", NO); }
 BOOL EeveeRecorderSaveArtwork(void) { return EVSaveArtworkFile(); }
 void EeveeRecorderSetSaveArtwork(BOOL save) { EVSetSettingBool(@"saveArtwork", save); }
+BOOL EeveeRecorderEmbedLyrics(void) { return EVSettingBool(@"embedLyrics", NO); }
+void EeveeRecorderSetEmbedLyrics(BOOL embed) { EVSetSettingBool(@"embedLyrics", embed); }
 
 NSURL *EVRecordingsRoot(void) {
     NSURL *docs = [[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
@@ -134,7 +136,7 @@ NSString *EVFormatTime(double s) {
     void (^s)(NSString *, id) = ^(NSString *k, id v) { if (v) d[k] = v; };
     s(@"key", self.key); s(@"title", self.title); s(@"artist", self.artist); s(@"album", self.album);
     s(@"albumArtist", self.albumArtist); s(@"genre", self.genre); s(@"uri", self.uri); s(@"isrc", self.isrc);
-    s(@"artworkURL", self.artworkURL);
+    s(@"artworkURL", self.artworkURL); s(@"lyrics", self.lyrics);
     if (self.bitrate) d[@"bitrate"] = @(self.bitrate);
     if (self.trackNumber) d[@"trackNumber"] = @(self.trackNumber);
     if (self.trackCount) d[@"trackCount"] = @(self.trackCount);
@@ -148,6 +150,7 @@ NSString *EVFormatTime(double s) {
     t.key = d[@"key"]; t.title = d[@"title"]; t.artist = d[@"artist"]; t.album = d[@"album"];
     t.albumArtist = d[@"albumArtist"]; t.genre = d[@"genre"]; t.uri = d[@"uri"]; t.isrc = d[@"isrc"];
     t.artworkURL = d[@"artworkURL"];
+    t.lyrics = d[@"lyrics"];
     t.bitrate = [d[@"bitrate"] unsignedIntValue];
     t.trackNumber = [d[@"trackNumber"] integerValue]; t.trackCount = [d[@"trackCount"] integerValue];
     t.discNumber = [d[@"discNumber"] integerValue]; t.year = [d[@"year"] integerValue];
@@ -204,6 +207,63 @@ static NSString *EVSpotifyTrackID(NSString *uri) {
     return rest.length ? rest : nil;
 }
 
+// Genius lyrics are fetched by Swift and cached here, keyed by Spotify track
+// id (preferred) or title+artist. The cache is bounded because a long session
+// can touch many tracks; the current track and the download candidate remain.
+static NSMutableDictionary<NSString *, NSString *> *evLyricsCache;
+static NSMutableArray<NSString *> *evLyricsOrder;
+static NSObject *evLyricsLock(void) {
+    static NSObject *lock; static dispatch_once_t once;
+    dispatch_once(&once, ^{ lock = [NSObject new]; });
+    return lock;
+}
+
+static NSString *EVLyricsCacheKey(NSString *uri, NSString *title, NSString *artist) {
+    NSString *trackID = EVSpotifyTrackID(uri);
+    if (trackID.length) return [@"id:" stringByAppendingString:trackID];
+    if (title.length && artist.length)
+        return [NSString stringWithFormat:@"ta:%@|%@", title.lowercaseString, artist.lowercaseString];
+    return nil;
+}
+
+static NSString *EVLyricsForInfo(EVTrackInfo *t) {
+    if (!t) return nil;
+    NSString *trackID = EVSpotifyTrackID(t.uri);
+    @synchronized(evLyricsLock()) {
+        if (trackID.length) {
+            NSString *s = evLyricsCache[[@"id:" stringByAppendingString:trackID]];
+            if (s.length) return s;
+        }
+        if (t.title.length && t.artist.length) {
+            NSString *s = evLyricsCache[[NSString stringWithFormat:@"ta:%@|%@", t.title.lowercaseString, t.artist.lowercaseString]];
+            if (s.length) return s;
+        }
+    }
+    return nil;
+}
+
+NSString *EVLyricsForTrackInfo(EVTrackInfo *info) { return EVLyricsForInfo(info); }
+
+void EeveeRecorderSetLyrics(NSString *lyrics, NSString *uri, NSString *title, NSString *artist) {
+    NSString *text = [lyrics stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSString *key = EVLyricsCacheKey(uri, title, artist);
+    if (!text.length || !key.length) return;
+    @synchronized(evLyricsLock()) {
+        if (!evLyricsCache) {
+            evLyricsCache = [NSMutableDictionary dictionary];
+            evLyricsOrder = [NSMutableArray array];
+        }
+        if (!evLyricsCache[key]) [evLyricsOrder addObject:key];
+        evLyricsCache[key] = text;
+        while (evLyricsOrder.count > 8) {
+            NSString *oldest = evLyricsOrder.firstObject;
+            [evLyricsOrder removeObjectAtIndex:0];
+            [evLyricsCache removeObjectForKey:oldest];
+        }
+    }
+    EVI("Meta", @"lyrics cached for '%@' (%lu chars)", title ?: key, (unsigned long)text.length);
+}
+
 static EVTrackInfo *EVReadNowPlaying(void) {
     NSDictionary *d = [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo;
     if (![d isKindOfClass:NSDictionary.class] || d.count == 0) return nil;
@@ -254,6 +314,7 @@ static void EVApplyExtra(EVTrackInfo *t) {
     if ([x[@"trackNumber"] integerValue]) t.trackNumber = [x[@"trackNumber"] integerValue];
     if ([x[@"discNumber"] integerValue]) t.discNumber = [x[@"discNumber"] integerValue];
     if ([x[@"year"] integerValue]) t.year = [x[@"year"] integerValue];
+    if (!t.lyrics.length) t.lyrics = EVLyricsForInfo(t);
 }
 
 void EeveeRecorderSetExtraMetadata(NSDictionary *md) {
@@ -277,6 +338,7 @@ static void EVMergeInto(EVTrackInfo *dst, EVTrackInfo *src) {
     if (!dst.artworkObject) dst.artworkObject = src.artworkObject;
     if (!dst.artworkURL) dst.artworkURL = src.artworkURL;
     if (!dst.bitrate) dst.bitrate = src.bitrate;
+    if (!dst.lyrics.length) dst.lyrics = src.lyrics.length ? src.lyrics : EVLyricsForInfo(dst);
 }
 
 static void evStoreArtwork(EVTrackInfo *t, NSData *jpg, NSString *source) {
@@ -479,10 +541,14 @@ void EVMetaStop(void) {
 }
 
 NSArray<NSString *> *EVMetaDebugLines(void) {
+    NSUInteger lyricChars = evCurrent.lyrics.length;
+    if (!lyricChars) lyricChars = EVLyricsForInfo(evCurrent).length;
     return @[@"== Metadata ==", [NSString stringWithFormat:@"now playing: %@%@", evLastNowPlayingNote, evWaitingForFreshStart ? @" | armed: waiting for a new track" : @""],
              [NSString stringWithFormat:@"track URI: %@ | image URL: %@", evCurrent.uri ?: @"-", evCurrent.artworkURL ?: @"-"],
              [NSString stringWithFormat:@"stream bitrate: %u bps | cover jpg file: %d | cover attached: %lu KB",
               EVStreamBitrate(), EVSaveArtworkFile(), (unsigned long)(evCurrent.artworkJPEG.length / 1024)],
+             [NSString stringWithFormat:@"lyrics: embed=%d cached=%lu chars",
+              EeveeRecorderEmbedLyrics(), (unsigned long)lyricChars],
              [NSString stringWithFormat:@"latency offset: %ld ms | export formats: %@ | keep session wav: %d",
               (long)EVSettingInt(@"metaLatencyMs", 0), EVSettingString(@"exportFormats", @"(none)"), EVSettingBool(@"keepSession", NO)]];
 }
@@ -679,6 +745,7 @@ static NSArray<AVMetadataItem *> *EVMetaItems(NSDictionary *t, NSData *art) {
     str(AVMetadataCommonIdentifierAlbumName, t[@"album"]);
     str(AVMetadataIdentifieriTunesMetadataAlbumArtist, t[@"albumArtist"]);
     str(AVMetadataIdentifieriTunesMetadataUserGenre, t[@"genre"]);
+    if (EeveeRecorderEmbedLyrics()) str(AVMetadataIdentifieriTunesMetadataLyrics, t[@"lyrics"]);
     NSInteger trk = [t[@"trackNumber"] integerValue], tot = [t[@"trackCount"] integerValue];
     if (trk > 0) {
         uint8_t b[8] = {0, 0, (uint8_t)(trk >> 8), (uint8_t)trk, (uint8_t)(tot >> 8), (uint8_t)tot, 0, 0};
@@ -873,6 +940,7 @@ static void evRunFinalize(NSURL *wav, uint32_t rate, NSArray<EVMarker *> *marker
         NSString *comment = [NSString stringWithFormat:@"Recorded with EeveeSpotify: %@ s, start %@, boundary %@",
                              [EVSec(en - s, rate) stringValue], EVFormatTime((double)s / rate), sg[@"method"]];
         NSString *werr = nil;
+        if (info && !info.lyrics.length) info.lyrics = EVLyricsForInfo(info);
         if (!EVWriteSegment(wavOut, pcm, s, en - s, rate, info, comment, &werr)) { [errs addObject:werr]; continue; }
         [outFiles addObject:wavOut];
         if (info && !info.artworkJPEG.length) EVFetchArtworkSync(info);

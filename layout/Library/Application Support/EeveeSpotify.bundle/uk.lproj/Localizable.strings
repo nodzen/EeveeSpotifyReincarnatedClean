@@ -145,3 +145,4 @@ recorder_unavailable_description = "Для запису потрібен дос�
 start_recording = "Почати запис";
 stop_recording = "Зупинити запис";
 save_artwork = "Зберігати обкладинку окремо";
+embed_genius_lyrics = "Вшивати тексти з Genius";

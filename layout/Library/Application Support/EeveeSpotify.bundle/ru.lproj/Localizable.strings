@@ -177,3 +177,4 @@ recorder_unavailable_description = "Для записи нужен доступ 
 start_recording = "Начать запись";
 stop_recording = "Остановить запись";
 save_artwork = "Сохранять обложку отдельно";
+embed_genius_lyrics = "Вшивать тексты из Genius";

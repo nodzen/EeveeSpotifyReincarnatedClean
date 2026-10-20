@@ -42,6 +42,38 @@ struct LatestPremiumPatchingGroup: HookGroup { }
 /// has the current URI/title/artist/image_url, even when no lyrics view asks
 /// for metadata. One second is enough for track changes and costs nothing.
 private var recorderTrackTimer: Timer?
+private var recorderLyricsLoading = Set<String>()
+private var recorderLyricsAttempted = Set<String>()
+private var recorderLyricsRetryAt: [String: Date] = [:]
+private let recorderLyricsQueue = DispatchQueue(label: "eevee.recorder.genius", qos: .utility)
+
+private func fetchRecorderLyrics(trackID: String, title: String, artist: String, uri: String) {
+    guard EeveeRecorderEmbedLyrics(), !trackID.isEmpty, !title.isEmpty, !artist.isEmpty else { return }
+    guard !recorderLyricsLoading.contains(trackID), !recorderLyricsAttempted.contains(trackID) else { return }
+    if let retry = recorderLyricsRetryAt[trackID], retry > Date() { return }
+    recorderLyricsLoading.insert(trackID)
+    recorderLyricsQueue.async {
+        var options = UserDefaults.lyricsOptions
+        options.romanization = false
+        let query = LyricsSearchQuery(title: title, primaryArtist: artist, spotifyTrackId: trackID)
+        let dto = try? GeniusLyricsRepository().getLyrics(query, options: options)
+        let text = dto?.lines.map(\.content).joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        DispatchQueue.main.async {
+            recorderLyricsLoading.remove(trackID)
+            guard let text, !text.isEmpty else {
+                recorderLyricsRetryAt[trackID] = Date().addingTimeInterval(30)
+                writeDebugLog("[Recorder] Genius lyrics unavailable for \(trackID)")
+                return
+            }
+            recorderLyricsAttempted.insert(trackID)
+            recorderLyricsRetryAt.removeValue(forKey: trackID)
+            EeveeRecorderSetLyrics(text, uri, title, artist)
+            writeDebugLog("[Recorder] Genius lyrics ready for \(trackID) (\(text.count) chars)")
+        }
+    }
+}
+
 private func startRecorderTrackTimer() {
     guard recorderTrackTimer == nil else { return }
     recorderTrackTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
@@ -52,6 +84,12 @@ private func startRecorderTrackTimer() {
         if (meta["title"] ?? "").isEmpty { meta["title"] = track.trackTitle() }
         if (meta["artist"] ?? "").isEmpty { meta["artist"] = track.artistName() }
         EeveeRecorderSetExtraMetadata(meta)
+        fetchRecorderLyrics(
+            trackID: trackID,
+            title: meta["title"] ?? track.trackTitle(),
+            artist: meta["artist"] ?? track.artistName(),
+            uri: meta["uri"] ?? "spotify:track:\(trackID)"
+        )
     }
 }
 

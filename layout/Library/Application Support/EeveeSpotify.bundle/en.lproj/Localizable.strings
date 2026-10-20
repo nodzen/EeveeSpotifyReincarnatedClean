@@ -325,3 +325,4 @@ recorder_unavailable_description = "Recording needs access to Spotify's audio re
 start_recording = "Start Recording";
 stop_recording = "Stop Recording";
 save_artwork = "Save Cover as Separate File";
+embed_genius_lyrics = "Embed Genius Lyrics";
