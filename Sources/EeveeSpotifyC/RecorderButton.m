@@ -181,6 +181,7 @@ static NSArray<UIView *> *EVLottieCandidates(void) {
 @property (nonatomic, assign) BOOL started;
 @property (nonatomic, weak) UIButton *playerDownloadButton;
 @property (nonatomic, weak) UIViewController *playerVC;
+@property (nonatomic, assign) BOOL playerDismissing;
 @property (nonatomic, assign) NSTimeInterval anchorMissingSince;
 @property (nonatomic, assign) NSUInteger candidateCount;
 @property (nonatomic, copy) NSString *hostDesc;
@@ -634,6 +635,10 @@ static void evPlacePlayerDownloadButton(UIViewController *vc) {
 
 static void evInstallPlayerDownloadButton(UIViewController *vc) {
     if (!vc.isViewLoaded) return;
+    if ([EVRecUI shared].playerDismissing) {
+        [objc_getAssociatedObject(vc, &kEVPlayerDownloadButtonKey) removeFromSuperview];
+        return;
+    }
     UIButton *b = objc_getAssociatedObject(vc, &kEVPlayerDownloadButtonKey);
     if (!b) {
         b = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -663,6 +668,7 @@ static BOOL evPlayerHookInstalled;
 
 static void evPlayerDidAppear(UIViewController *self, SEL _cmd, BOOL animated) {
     if (evOrigPlayerDidAppear) ((void (*)(id, SEL, BOOL))evOrigPlayerDidAppear)(self, _cmd, animated);
+    [EVRecUI shared].playerDismissing = NO;
     evInstallPlayerDownloadButton(self);
 }
 
@@ -674,6 +680,7 @@ static void evPlayerDidLayout(UIViewController *self, SEL _cmd) {
 }
 
 static void evPlayerWillDisappear(UIViewController *self, SEL _cmd, BOOL animated) {
+    [EVRecUI shared].playerDismissing = YES;
     if (evOrigPlayerWillDisappear) ((void (*)(id, SEL, BOOL))evOrigPlayerWillDisappear)(self, _cmd, animated);
     UIButton *b = objc_getAssociatedObject(self, &kEVPlayerDownloadButtonKey);
     [b removeFromSuperview];
