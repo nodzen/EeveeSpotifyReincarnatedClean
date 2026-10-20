@@ -16,6 +16,7 @@
 #import <math.h>
 #import <unistd.h>
 #import <stdio.h>
+#import <stdlib.h>
 #import <string.h>
 #import <sys/sysctl.h>
 #import <sys/mman.h>
@@ -24,6 +25,7 @@
 #import <mach-o/getsect.h>
 #import <objc/runtime.h>
 #import "EVRecorderInternal.h"
+#import "fishhook.h"
 
 #if __has_include(<ptrauth.h>)
 #import <ptrauth.h>
@@ -90,6 +92,37 @@ static NSDate *sessionStart;
 static uint64_t writtenFramesTotal;
 static NSMutableArray<EVMarker *> *markers;
 static NSString *lastSessionSummary = @"";
+
+#pragma mark - AudioUnit render-callback tap (no JIT)
+
+// Spotify does not import AudioUnitRender. It installs a render callback on an
+// AudioUnit with AudioUnitSetProperty(kAudioUnitProperty_SetRenderCallback).
+// Rebinding that one GOT entry with fishhook only writes a data pointer, so the
+// tap works without JIT/debugger. We wrap the callback, let Spotify fill the
+// buffer, then copy the float32 PCM to the existing recorder ring.
+
+typedef OSStatus (*AudioUnitSetPropertyFn)(AudioUnit, AudioUnitPropertyID, AudioUnitScope,
+                                           AudioUnitElement, const void *, UInt32);
+
+typedef struct EVTapContext {
+    AURenderCallback original;
+    void *originalRefCon;
+    AudioUnit unit;
+    AudioUnitScope scope;
+    AudioUnitElement element;
+    uint32_t rate;
+    uint32_t channels;
+    bool rateProbed;
+} EVTapContext;
+
+static AudioUnitSetPropertyFn originalSetProperty;
+static pthread_mutex_t tapLock = PTHREAD_MUTEX_INITIALIZER;
+static _Atomic(int) tapState;                 // 0 untried, 1 installed, 2 failed
+static _Atomic(bool) tapCaptureEnabled = true;
+static NSString *tapError;
+static _Atomic(uint64_t) tapWrapCount, tapCallbackCount;
+static _Atomic(uint32_t) tapRate, tapChannels;
+static _Atomic(uintptr_t) tapLastUnit, tapLastOriginal;
 
 static NSObject *evSync(void) {
     static NSObject *o; static dispatch_once_t t;
@@ -296,6 +329,131 @@ static void captureBuffers(AudioBufferList *list, UInt32 frames) {
     atomic_fetch_add_explicit(&statCaptured, 1, memory_order_relaxed);
 }
 
+static void evTapProbeFormat(EVTapContext *ctx, bool final) {
+    if (!ctx || ctx->rate) return;
+    if (final && ctx->rateProbed) return;
+    if (final) ctx->rateProbed = true;
+
+    AudioStreamBasicDescription asbd = {0};
+    UInt32 size = sizeof(asbd);
+    if (AudioUnitGetProperty(ctx->unit, kAudioUnitProperty_StreamFormat,
+                             ctx->scope, ctx->element, &asbd, &size) != noErr) return;
+    uint32_t rate = (uint32_t)asbd.mSampleRate;
+    if (rate < 8000 || rate > 192000) return;
+    ctx->rate = rate;
+    atomic_store(&tapRate, rate);
+    if (asbd.mChannelsPerFrame >= 1 && asbd.mChannelsPerFrame <= 2) {
+        ctx->channels = asbd.mChannelsPerFrame;
+        atomic_store(&tapChannels, asbd.mChannelsPerFrame);
+    }
+}
+
+// Wraps Spotify's render callback without touching its code. The original
+// callback fills ioData (float32, interleaved); we copy it afterwards.
+static OSStatus evTapRender(void *refCon, AudioUnitRenderActionFlags *flags, const AudioTimeStamp *time,
+                            UInt32 bus, UInt32 frames, AudioBufferList *data) {
+    EVTapContext *ctx = (EVTapContext *)refCon;
+    if (!ctx || !ctx->original) return kAudioUnitErr_InvalidParameter;
+
+    OSStatus status = ctx->original(ctx->originalRefCon, flags, time, bus, frames, data);
+    atomic_fetch_add_explicit(&tapCallbackCount, 1, memory_order_relaxed);
+    atomic_fetch_add_explicit(&statCalls, 1, memory_order_relaxed);
+    if (status != noErr || !atomic_load_explicit(&tapCaptureEnabled, memory_order_relaxed) ||
+        !atomic_load_explicit(&capturing, memory_order_relaxed) ||
+        !atomic_load_explicit(&sessionActive, memory_order_relaxed)) return status;
+
+    evTapProbeFormat(ctx, true);
+    if (ctx->rate) {
+        uint32_t current = atomic_load_explicit(&sampleRate, memory_order_relaxed);
+        if (current && current != ctx->rate) {
+            if (atomic_load_explicit(&framesCaptured, memory_order_relaxed) == 0) {
+                atomic_store_explicit(&sampleRate, ctx->rate, memory_order_relaxed);
+            } else {
+                atomic_store(&mismatchRate, ctx->rate);
+                atomic_store(&abortFlag, true);
+                return status;
+            }
+        }
+    }
+    if (!atomic_load_explicit(&formatReady, memory_order_acquire)) {
+        atomic_store(&fmtBits, 32);
+        atomic_store(&fmtIsFloat, true);
+        atomic_store_explicit(&formatReady, true, memory_order_release);
+    }
+    if (data && data->mNumberBuffers > 0) {
+        uint32_t channels = data->mBuffers[0].mNumberChannels;
+        if (channels >= 1 && channels <= 2)
+            atomic_store_explicit(&fmtChannels, channels, memory_order_relaxed);
+        if (data->mBuffers[0].mDataByteSize && frames) {
+            atomic_fetch_add_explicit(&statMatched, 1, memory_order_relaxed);
+            captureBuffers(data, frames);
+        }
+    }
+    return status;
+}
+
+static OSStatus evTapSetProperty(AudioUnit unit, AudioUnitPropertyID prop, AudioUnitScope scope,
+                                 AudioUnitElement element, const void *data, UInt32 size) {
+    if (prop == kAudioUnitProperty_SetRenderCallback && data && size >= sizeof(AURenderCallbackStruct)) {
+        const AURenderCallbackStruct *original = (const AURenderCallbackStruct *)data;
+        if (original->inputProc && originalSetProperty) {
+            EVTapContext *ctx = calloc(1, sizeof(*ctx));
+            if (ctx) {
+                ctx->original = original->inputProc;
+                ctx->originalRefCon = original->inputProcRefCon;
+                ctx->unit = unit;
+                ctx->scope = scope;
+                ctx->element = element;
+                evTapProbeFormat(ctx, false);
+
+                AURenderCallbackStruct wrapped = { evTapRender, ctx };
+                OSStatus status = originalSetProperty(unit, prop, scope, element, &wrapped, sizeof(wrapped));
+                if (status == noErr) {
+                    atomic_fetch_add_explicit(&tapWrapCount, 1, memory_order_relaxed);
+                    atomic_store(&tapLastUnit, (uintptr_t)unit);
+                    atomic_store(&tapLastOriginal, (uintptr_t)original->inputProc);
+                    EVI("Tap", @"wrapped render callback unit=%p orig=%p rate=%u ch=%u",
+                        unit, (void *)original->inputProc, ctx->rate, ctx->channels);
+                    return status;
+                }
+                free(ctx);
+            }
+        }
+    }
+    return originalSetProperty ? originalSetProperty(unit, prop, scope, element, data, size)
+                               : kAudioUnitErr_Uninitialized;
+}
+
+static BOOL evTapInstallOnce(void) {
+    pthread_mutex_lock(&tapLock);
+    int state = atomic_load(&tapState);
+    if (state == 1) { pthread_mutex_unlock(&tapLock); return YES; }
+    if (state == 2) { pthread_mutex_unlock(&tapLock); return NO; }
+
+    struct rebinding rebind = {"AudioUnitSetProperty", (void *)evTapSetProperty, (void **)&originalSetProperty};
+    void *header = (void *)_dyld_get_image_header(0);
+    int rc = header ? rebind_symbols_image(header, _dyld_get_image_vmaddr_slide(0), &rebind, 1) : -1;
+    // The audio driver is in the main executable, but rebind other images in
+    // Spotify.app too if Apple ever moves it into a framework.
+    for (uint32_t i = 1; !originalSetProperty && i < _dyld_image_count(); i++) {
+        const char *name = _dyld_get_image_name(i);
+        if (!name || !strstr(name, "Spotify.app/")) continue;
+        rebind_symbols_image((void *)_dyld_get_image_header(i), _dyld_get_image_vmaddr_slide(i), &rebind, 1);
+        rc = 0;
+    }
+    if (rc != 0 || !originalSetProperty) {
+        NSString *error = [NSString stringWithFormat:
+            @"AudioUnitSetProperty tap unavailable (rc=%d, original=%p)", rc, (void *)originalSetProperty];
+        @synchronized(evSync()) { tapError = [error copy]; }
+        atomic_store(&tapState, 2);
+        pthread_mutex_unlock(&tapLock);
+        return NO;
+    }
+    atomic_store(&tapState, 1);
+    pthread_mutex_unlock(&tapLock);
+    return YES;
+}
+
 static OSStatus hookedRender(AudioUnit unit, AudioUnitRenderActionFlags *flags, const AudioTimeStamp *time,
                              UInt32 bus, UInt32 frames, AudioBufferList *data) {
     uintptr_t caller = stripPAC(__builtin_return_address(0));
@@ -344,15 +502,7 @@ static BOOL failHook(NSString *msg) {
     return NO;
 }
 
-static BOOL installHookOnce(void) {
-    int st = atomic_load(&hookState);
-    if (st == 1) return YES;
-    if (st == 2) {
-        setLastError(hookError);
-        EVW("Hook", @"hook already failed in this process (%@); not retrying (a retry used to crash the app)", hookError);
-        return NO;
-    }
-
+static BOOL installInlineHookOnce(void) {
     uint32_t cs; BOOL debugged, traced, mapJit; int jitErrno;
     evEnvProbe(&cs, &debugged, &traced, &mapJit, &jitErrno);
     BOOL jitOK = debugged || traced || mapJit;
@@ -387,6 +537,48 @@ static BOOL installHookOnce(void) {
     atomic_store(&hookState, 1);
     EVI("Hook", @"installed via %@, original/trampoline=%p", hookMode, (void *)originalRender);
     return YES;
+}
+
+static BOOL installHookOnce(void) {
+    int st = atomic_load(&hookState);
+    if (st == 1) return YES;
+    if (st == 2) {
+        setLastError(hookError);
+        EVW("Hook", @"hook already failed in this process (%@); not retrying (a retry used to crash the app)", hookError);
+        return NO;
+    }
+
+    BOOL force = EVSettingBool(@"forceInline", NO);
+    if (!force && evTapInstallOnce()) {
+        atomic_store(&tapCaptureEnabled, true);
+        hookMode = @"callback(fishhook)";
+        hookError = nil;
+        atomic_store(&hookState, 1);
+        setLastError(nil);
+        EVI("Hook", @"using render-callback tap; no JIT required");
+        return YES;
+    }
+
+    NSString *te; @synchronized(evSync()) { te = tapError; }
+    if (te.length) EVW("Hook", @"render-callback tap unavailable: %@", te);
+
+    if (installInlineHookOnce()) {
+        atomic_store(&tapCaptureEnabled, false);
+        return YES;
+    }
+
+    // The inline path can fail on a JIT-less sideload; the callback tap is the
+    // whole point of this build. Retry it when "force inline" was requested.
+    if (force && evTapInstallOnce()) {
+        atomic_store(&tapCaptureEnabled, true);
+        hookMode = @"callback(fishhook)";
+        hookError = nil;
+        atomic_store(&hookState, 1);
+        setLastError(nil);
+        EVI("Hook", @"inline unavailable; using render-callback tap; no JIT required");
+        return YES;
+    }
+    return NO;
 }
 
 static void evLogEnvironment(void) {
@@ -553,22 +745,42 @@ static BOOL evStartLocked(void) {
     NSError *err = nil;
     if (![[NSFileManager defaultManager] createDirectoryAtURL:dir withIntermediateDirectories:YES attributes:nil error:&err])
         return evFail([NSString stringWithFormat:@"Cannot create folder: %@", err.localizedDescription]);
+    BOOL tapMode = atomic_load(&tapState) == 1 && atomic_load(&tapCaptureEnabled);
+    uint32_t startRate = 44100;
+    if (tapMode) {
+        startRate = atomic_load(&tapRate);
+        if (!startRate) startRate = (uint32_t)[AVAudioSession sharedInstance].sampleRate;
+        if (startRate < 8000 || startRate > 192000) startRate = 44100;
+    }
+
     NSURL *wav = [dir URLByAppendingPathComponent:@"session.wav"];
     FILE *f = fopen(wav.path.fileSystemRepresentation, "wb");
     if (!f) return evFail([NSString stringWithFormat:@"Cannot open %@ (errno %d)", wav.path, errno]);
-    writeWAVHeader(f, 44100, 0);
+    writeWAVHeader(f, startRate, 0);
 
     sessionDir = dir; sessionWav = wav; sessionStart = [NSDate date];
     outputPath = wav.path; outputFile = f; writtenFramesTotal = 0;
     @synchronized(evSync()) { markers = [NSMutableArray array]; }
     atomic_store(&writeIndex, 0); atomic_store(&readIndex, 0);
-    atomic_store(&formatReady, false); atomic_store(&abortFlag, false);
-    atomic_store(&sampleRate, 44100); atomic_store(&framesCaptured, 0);
+    atomic_store(&abortFlag, false);
+    if (tapMode) {
+        uint32_t channels = atomic_load(&tapChannels);
+        atomic_store(&sampleRate, startRate);
+        atomic_store(&fmtChannels, channels >= 1 && channels <= 2 ? channels : 2);
+        atomic_store(&fmtBits, 32);
+        atomic_store(&fmtIsFloat, true);
+        atomic_store_explicit(&formatReady, true, memory_order_release);
+    } else {
+        atomic_store(&formatReady, false);
+        atomic_store(&sampleRate, 44100);
+    }
+    atomic_store(&framesCaptured, 0);
     atomic_store(&statCalls, 0); atomic_store(&statMatched, 0); atomic_store(&statCaptured, 0);
     atomic_store(&statDropped, 0); atomic_store(&statBadLayout, 0); atomic_store(&peakBits, 0);
     refreshCallerRange();
     atomic_store(&capturing, true);
     atomic_store(&sessionActive, true);
+    EVI("Core", @"capture mode: %@ (rate %u)", tapMode ? @"render-callback tap" : @"inline", startRate);
 
     int rc = pthread_create(&writerThread, NULL, writerMain, NULL);
     if (rc != 0) {
@@ -583,6 +795,7 @@ static BOOL evStartLocked(void) {
 }
 
 BOOL EeveeAudioRecorderSupported(void) {
+    if (evTapInstallOnce()) return YES;
     return dlsym(RTLD_DEFAULT, "MSHookFunction") != NULL;
 }
 
@@ -641,6 +854,12 @@ NSArray<NSString *> *EVCoreDebugLines(void) {
     [l addObject:[NSString stringWithFormat:@"== Core ==\nbuild %s %s | pid %d", __DATE__, __TIME__, getpid()]];
     [l addObject:[NSString stringWithFormat:@"hook: %@ (state %d) %@", hookMode, atomic_load(&hookState), hookError ? [@"| error: " stringByAppendingString:hookError] : @""]];
     [l addObject:[NSString stringWithFormat:@"JIT: CS_DEBUGGED=%d P_TRACED=%d MAP_JIT=%d (cs=0x%08x) force=%d", dbg, trc, jit, cs, EVSettingBool(@"forceInline", NO)]];
+    NSString *te; @synchronized(evSync()) { te = tapError; }
+    [l addObject:[NSString stringWithFormat:@"tap: state=%d capture=%d wraps=%llu callbacks=%llu rate=%u ch=%u unit=%p orig=%p%@",
+        atomic_load(&tapState), atomic_load(&tapCaptureEnabled), (unsigned long long)atomic_load(&tapWrapCount),
+        (unsigned long long)atomic_load(&tapCallbackCount), atomic_load(&tapRate), atomic_load(&tapChannels),
+        (void *)atomic_load(&tapLastUnit), (void *)atomic_load(&tapLastOriginal),
+        te.length ? [@" | error: " stringByAppendingString:te] : @""]];
     [l addObject:[NSString stringWithFormat:@"last error: %@", EeveeAudioRecorderLastError() ?: @"none"]];
     [l addObject:[NSString stringWithFormat:@"recording: %d | session: %@", atomic_load(&sessionActive), sessionDir.lastPathComponent ?: @"-"]];
     [l addObject:[NSString stringWithFormat:@"format: ready=%d rate=%u bits=%u float=%d ch=%u", atomic_load(&formatReady), rate, atomic_load(&fmtBits), atomic_load(&fmtIsFloat), atomic_load(&fmtChannels)]];
@@ -709,8 +928,14 @@ static void evProbeInstall(void) {
 }
 
 __attribute__((constructor)) static void evCoreInit(void) {
+    // Install before Spotify creates its audio unit, otherwise the existing
+    // render callback is already in place and cannot be wrapped retroactively.
+    evTapInstallOnce();
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         EVI("Core", @"recorder loaded: build %s %s pid %d", __DATE__, __TIME__, getpid());
+        NSString *te; @synchronized(evSync()) { te = tapError; }
+        EVI("Tap", @"early state=%d wraps=%llu%@", atomic_load(&tapState),
+            (unsigned long long)atomic_load(&tapWrapCount), te.length ? [@" error: " stringByAppendingString:te] : @"");
         if (EVSettingBool(@"probeDriver", NO)) evProbeInstall();
         EVResumePendingSessions();
     });
