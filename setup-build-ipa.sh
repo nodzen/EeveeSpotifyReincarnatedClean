@@ -143,7 +143,7 @@ mkdir -p "$LOCAL_BIN"
 ensure_path_contains "$LOCAL_BIN"
 
 pipx ensurepath >/dev/null 2>&1 || true
-pipx install --force git+https://github.com/asdfzxcvbn/pyzule-rw.git >/dev/null
+pipx install --force "git+https://github.com/asdfzxcvbn/pyzule-rw.git@04a40f2aa65ec9cb36127f74d52ae4ef71377c50" >/dev/null
 
 need_cmd cyan
 
@@ -160,12 +160,19 @@ if ! command -v ipapatch >/dev/null 2>&1; then
   ARCH="$(uname -m)"
   if [ "$ARCH" = "x86_64" ]; then
     SUFFIX="macos-amd64"
+    EXPECTED_SHA256="0577fd7af013991c4e8b24b7a05146d2dd8b0650e1d017c3c538264a34ada0b3"
   else
     SUFFIX="macos-arm64"
+    EXPECTED_SHA256="05df2e7310b041891892cf152ce6bbd93574880bf147b96d775051fad796737f"
   fi
 
-  curl -fsSL "https://github.com/asdfzxcvbn/ipapatch/releases/latest/download/ipapatch.${SUFFIX}" \
+  curl -fsSL "https://github.com/asdfzxcvbn/ipapatch/releases/download/v2.1.3/ipapatch.${SUFFIX}" \
     -o "$LOCAL_BIN/ipapatch"
+  if ! printf '%s  %s\n' "$EXPECTED_SHA256" "$LOCAL_BIN/ipapatch" | shasum -a 256 -c - >/dev/null; then
+    rm -f "$LOCAL_BIN/ipapatch"
+    err "ipapatch checksum mismatch; refusing to run the download"
+    exit 1
+  fi
   chmod +x "$LOCAL_BIN/ipapatch"
 fi
 

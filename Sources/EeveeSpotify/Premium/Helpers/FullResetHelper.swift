@@ -87,15 +87,17 @@ class FullResetHelper {
 
     private static func wipeSandboxDirs(_ c: WipeCounts) {
         let fm = FileManager.default
+        let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first
+        let recordings = docs?.appendingPathComponent("Recordings", isDirectory: true).standardizedFileURL.path
         let dirs: [URL?] = [
             fm.urls(for: .libraryDirectory,            in: .userDomainMask).first,
-            fm.urls(for: .documentDirectory,           in: .userDomainMask).first,
+            docs,
             fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first,
             fm.urls(for: .cachesDirectory,             in: .userDomainMask).first,
             URL(fileURLWithPath: NSTemporaryDirectory()),
         ]
         for url in dirs.compactMap({ $0 }) {
-            removeChildren(of: url, c: c)
+            removeChildren(of: url, keeping: recordings, c: c)
         }
     }
 
@@ -111,14 +113,15 @@ class FullResetHelper {
         for gid in candidates {
             guard let url = fm.containerURL(forSecurityApplicationGroupIdentifier: gid) else { continue }
             c.groups += 1
-            removeChildren(of: url, c: c)
+            removeChildren(of: url, keeping: nil, c: c)
         }
     }
 
-    private static func removeChildren(of url: URL, c: WipeCounts) {
+    private static func removeChildren(of url: URL, keeping keep: String?, c: WipeCounts) {
         let fm = FileManager.default
         guard let items = try? fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil) else { return }
         for item in items {
+            if let keep, item.standardizedFileURL.path == keep { continue }
             do {
                 try fm.removeItem(at: item)
                 c.files += 1

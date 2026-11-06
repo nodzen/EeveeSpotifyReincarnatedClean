@@ -158,7 +158,7 @@ debug_section_footer = "تصدير أو مسح سجل تصحيح الأخطاء.
 
 // Full reset
 resetButtonTitle = "إعادة ضبط كاملة";
-resetSubtitle = "مسح الـ Keychain والـ Sandbox وفولدرات التطبيق (App-group container) لـ Spotify، وهيخرجك ويقفل التطبيق إجباري عشان يطبق التغييرات.";
+fullResetSubtitle = "مسح الـ Keychain والـ Sandbox وفولدرات التطبيق (App-group container) لـ Spotify، وهيخرجك ويقفل التطبيق إجباري عشان يطبق التغييرات.";
 resetFooter = "مسح الـ Keychain والـ Sandbox وفولدرات التطبيق (App-group container) لـ Spotify، وهيخرجك ويقفل التطبيق إجباري عشان يطبق التغييرات. مش هيأثر على أي تطبيقات تانية.";
 
 // Settings Bar

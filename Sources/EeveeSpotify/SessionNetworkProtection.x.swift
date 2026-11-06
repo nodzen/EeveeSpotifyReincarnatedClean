@@ -78,10 +78,13 @@ class URLSessionTaskResumeHook: ClassHook<NSObject> {
 
             let isSpotifyFirstParty = host == "spclient.wg.spotify.com" ||
                 host.hasSuffix(".spotify.com")
-            if isSpotifyFirstParty, elapsed > 30, url.isDeleteToken {
+            // DeleteToken revokes the stored credential. Cancel it before it can
+            // reach the server; the response-block hook only covers tasks that
+            // were already in flight before this hook ran.
+            if isSpotifyFirstParty, url.isDeleteToken {
                 writeDebugLog("[NET] Cancelling DeleteToken at \(elapsedInt)s")
-                orig.resume()
                 task.cancel()
+                orig.resume()
                 return
             }
         }

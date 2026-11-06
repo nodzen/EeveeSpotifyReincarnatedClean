@@ -28,6 +28,8 @@ extension EeveeLyricsSettingsViewModel {
                 }
                 
                 if url.host == "lrclib.net" {
+                    // Selecting the default must also undo a previous mirror.
+                    LrclibLyricsRepository.shared.apiUrl = urlString
                     return Just(.originalURL).eraseToAnyPublisher()
                 }
                 

@@ -22,6 +22,7 @@ struct EeveeLyricsSettingsView: View {
 
                 if viewModel.lyricsSource == .spicylyrics {
                     karaokeAppearanceSection()
+                    uncensorSection()
                 }
             }
             
@@ -55,6 +56,18 @@ struct EeveeLyricsSettingsView: View {
         }
     }
     
+    @ViewBuilder private func uncensorSection() -> some View {
+        Section(footer: Text("uncensor_cross_provider_description".localized)) {
+            Toggle(
+                "uncensor_cross_provider".localized,
+                isOn: Binding<Bool>(
+                    get: { UserDefaults.uncensorCrossProvider },
+                    set: { UserDefaults.uncensorCrossProvider = $0 }
+                )
+            )
+        }
+    }
+
     @ViewBuilder private func geniusFallbackSection() -> some View {
         Section {
             Toggle(

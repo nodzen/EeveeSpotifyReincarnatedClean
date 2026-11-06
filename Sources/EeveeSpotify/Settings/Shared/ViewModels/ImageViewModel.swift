@@ -4,7 +4,9 @@ import UIKit
 class ImageViewModel: ObservableObject {
     @Published var image: UIImage?
 
-    private let imageCache = NSCache<NSString, UIImage>()
+    // Shared: SwiftUI recreates ImageViewModel values while scrolling, so a
+    // per-instance cache re-downloaded the same contributor avatars.
+    private static let imageCache = NSCache<NSString, UIImage>()
 
     init(urlString: String?) {
         loadImage(urlString: urlString)
@@ -42,10 +44,10 @@ class ImageViewModel: ObservableObject {
     }
 
     private func setImageCache(image: UIImage, key: String) {
-        imageCache.setObject(image, forKey: key as NSString)
+        Self.imageCache.setObject(image, forKey: key as NSString)
     }
 
     private func getImageFromCache(from key: String) -> UIImage? {
-        return imageCache.object(forKey: key as NSString)
+        return Self.imageCache.object(forKey: key as NSString)
     }
 }

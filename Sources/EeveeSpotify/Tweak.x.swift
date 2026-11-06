@@ -31,6 +31,10 @@ struct PremiumUIHooksGroup: HookGroup { }       // UI JSON injections, Siri twea
 
 struct BasePremiumPatchingGroup: HookGroup { }
 
+// 8.9.8 routes bootstrap through SPTCoreURLSessionDataDelegate, not
+// SPTDataLoaderService. Keep one bootstrap hook for that version family only.
+struct IOS14BootstrapGroup: HookGroup { }
+
 struct IOS14PremiumPatchingGroup: HookGroup { }
 struct NonIOS14PremiumPatchingGroup: HookGroup { }
 struct IOS14And15PremiumPatchingGroup: HookGroup { }
@@ -151,6 +155,7 @@ func activatePremiumPatchingGroup() {
     BasePremiumPatchingGroup().activate()
     
     if EeveeSpotify.hookTarget == .lastAvailableiOS14 {
+        IOS14BootstrapGroup().activate()
         IOS14PremiumPatchingGroup().activate()
     }
     else if EeveeSpotify.hookTarget == .v91 {

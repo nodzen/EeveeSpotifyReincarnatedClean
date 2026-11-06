@@ -266,6 +266,8 @@ static void setRequiredIDs(void) {
 		(__bridge NSString *)kSecClass: (__bridge NSString *)kSecClassGenericPassword,
 		(__bridge NSString *)kSecAttrAccount: @"zxPluginsInjectGenericEntry",
 		(__bridge NSString *)kSecAttrService: @"",
+		// SecItemAdd rejects a generic-password item without value data.
+		(__bridge NSString *)kSecValueData: [NSData data],
 		(__bridge id)kSecReturnAttributes: (id)kCFBooleanTrue,
 	};
 
@@ -274,7 +276,10 @@ static void setRequiredIDs(void) {
 	if (status == errSecItemNotFound) {
 		status = SecItemAdd((__bridge CFDictionaryRef)query, (CFTypeRef *)&result);
 	}
-	if (status != errSecSuccess) return;
+	if (status != errSecSuccess) {
+		NSLog(@"[zxPluginsInject] keychain access-group probe failed: %d", (int)status);
+		return;
+	}
 
 	accessGroupId = [(__bridge NSDictionary *)result objectForKey:(__bridge NSString *)kSecAttrAccessGroup];
 	if (result) CFRelease(result);

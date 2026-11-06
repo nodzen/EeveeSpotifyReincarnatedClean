@@ -47,7 +47,7 @@ LRCLIB: Najbardziej otwarte źródło, oferuje zsynchronizowane teksty. Brakuje 
 
 Musixmatch: Używane przez Spotify, oferuje zsynchronizowane teksty dla wielu utworów. Wymaga tokenu użytkownika.";
 lyrics_additional_info = "Jeśli EeveeSpotify nie znajdzie utworu lub tekstu, pojawi się komunikat \"Nie udało się załadować tekstu\". Teksty z Genius mogą być błędne z powodu sposobu wyszukiwania utworów. W większości przypadków działa to poprawnie.";
-spicylyrics_description = "SpicyLyrics oferuje teksty karaoke słowo po słowie, korzystając z tokenu Spotify. Nie jest wymagana żadna dodatkowa konfiguracja.";
+spicylyrics_description = "SpicyLyrics oferuje teksty karaoke słowo po słowie. Działa bez wysyłania tokenu Spotify; możesz zezwolić na token w ustawieniach tekstów, jeśli usługa odrzuca anonimowe żądania.";
 petitlyrics_description = "PetitLyrics: Oferuje wiele zsynchronizowanych tekstów japońskich, ale niewiele międzynarodowych.";
 
 musixmatch_user_token = "Token użytkownika Musixmatch";
@@ -177,7 +177,7 @@ debug_section_footer = "Eksportuj lub wyczyść dziennik debugowania.";
 
 // Full reset
 resetButtonTitle = "Pełny reset";
-resetSubtitle = "Czyści pęk kluczy Spotify, katalogi piaskownicy i kontenery grup aplikacji. Wymusza ponowne logowanie. Po zakończeniu aplikacja zostanie zamknięta.";
+fullResetSubtitle = "Czyści pęk kluczy Spotify, katalogi piaskownicy i kontenery grup aplikacji. Wymusza ponowne logowanie. Po zakończeniu aplikacja zostanie zamknięta.";
 resetFooter = "Wymusza ponowne logowanie. Czyści wpisy pęku kluczy Spotify, katalogi piaskownicy i kontenery grup aplikacji. Inne aplikacje instalowane poza App Store pozostają nietknięte. Po zakończeniu aplikacja zostanie zamknięta.";
 
 // Settings Bar

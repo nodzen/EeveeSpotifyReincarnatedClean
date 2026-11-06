@@ -158,7 +158,7 @@ debug_section_footer = "Xuất hoặc xóa nhật ký gỡ lỗi.";
 
 // Full reset
 resetButtonTitle = "Đặt lại toàn bộ";
-resetSubtitle = "Xóa chuỗi khóa Spotify (keychain), các thư mục hộp cát (sandbox) và các bộ chứa nhóm ứng dụng (app-group). Cần phải đăng nhập lại. Ứng dụng sẽ thoát sau khi hoàn tất.";
+fullResetSubtitle = "Xóa chuỗi khóa Spotify (keychain), các thư mục hộp cát (sandbox) và các bộ chứa nhóm ứng dụng (app-group). Cần phải đăng nhập lại. Ứng dụng sẽ thoát sau khi hoàn tất.";
 resetFooter = "Cần phải đăng nhập lại. Xóa các mục chuỗi khóa Spotify, thư mục hộp cát và bộ chứa nhóm ứng dụng. Các ứng dụng được sideload khác không bị ảnh hưởng. Ứng dụng sẽ thoát sau khi hoàn tất.";
 
 // Settings Bar

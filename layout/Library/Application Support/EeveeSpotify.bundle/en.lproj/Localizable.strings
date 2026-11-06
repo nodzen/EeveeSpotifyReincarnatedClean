@@ -47,7 +47,7 @@ LRCLIB: The most open service, offering time-synced lyrics. However, it lacks ly
 
 Musixmatch: The service Spotify uses. Provides time-synced lyrics for many songs, but you'll need a user token to use this source.";
 lyrics_additional_info = "If EeveeSpotify is unable to find a song or process the lyrics, you'll see a \"Couldn't load the lyrics for this song\" message. The lyrics might be wrong for some songs when using Genius due to how the tweak searches songs. I've made it work in most cases.";
-spicylyrics_description = "SpicyLyrics provides word-by-word karaoke lyrics using Spotify's own token. No extra setup needed.";
+spicylyrics_description = "SpicyLyrics provides word-by-word karaoke lyrics. It works without sending your Spotify token; you can allow the token in Lyrics settings if the provider rejects anonymous requests.";
 petitlyrics_description = "PetitLyrics: Offers plenty of time-synced Japanese and some international lyrics.";
 
 musixmatch_user_token = "Musixmatch User Token";
@@ -58,6 +58,11 @@ enter_user_token_message = "In order to use Musixmatch, you need to retrieve you
 
 genius_fallback = "Genius Fallback";
 genius_fallback_description = "Load lyrics from Genius if there is a problem with %@.";
+
+spicy_token_sharing = "Send Spotify Token to Spicy Lyrics";
+spicy_token_sharing_description = "Lets Spicy Lyrics call its API as your Spotify account. Only enable this if anonymous requests fail and you trust the service.";
+uncensor_cross_provider = "Fill Censored Words from Other Providers";
+uncensor_cross_provider_description = "When lyrics contain ***, check LRCLIB, Musixmatch and Genius for the missing word. Sends the track title and artist to those services.";
 
 show_fallback_reasons = "Show Fallback Reasons";
 
@@ -184,7 +189,7 @@ debug_section_footer = "Enable file logging, then reproduce the issue. Export th
 
 // Full reset
 resetButtonTitle = "Full Reset";
-resetSubtitle = "Wipes Spotify keychain, sandbox dirs, and app-group containers. Forces re-login. App exits when done.";
+fullResetSubtitle = "Wipes Spotify keychain, sandbox dirs, and app-group containers. Forces re-login. App exits when done. Recordings are kept.";
 resetFooter = "Force re-login. Wipes Spotify keychain entries, sandbox dirs, and app-group containers. Other sideloaded apps untouched. App exits when done.";
 
 // Settings Bar

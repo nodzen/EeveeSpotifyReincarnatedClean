@@ -35,6 +35,9 @@ struct LyricsUncensorFill {
         query: LyricsSearchQuery,
         options: LyricsOptions
     ) -> [String] {
+        guard UserDefaults.uncensorCrossProvider else {
+            return lines // cross-provider lookup is opt-in
+        }
         guard lines.contains(where: { containsFullCensor($0) }) else {
             return lines // nothing to do — avoid fallback network calls entirely
         }
@@ -131,6 +134,9 @@ struct LyricsUncensorFill {
         query: LyricsSearchQuery,
         options: LyricsOptions
     ) -> [KaraokeLineDto] {
+        guard UserDefaults.uncensorCrossProvider else {
+            return lines
+        }
         let plainLines = lines.map(\.plainText)
         guard plainLines.contains(where: { containsFullCensor($0) }) else {
             return lines

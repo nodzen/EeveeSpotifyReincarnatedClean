@@ -253,7 +253,7 @@ struct EeveeSettingsView: View {
                 Button {
                     confirmDestructive(
                         title: "resetButtonTitle".localized,
-                        message: "resetSubtitle".localized,
+                        message: "fullResetSubtitle".localized,
                         confirmTitle: "resetButtonTitle".localized
                     ) {
                         isClearingData = true

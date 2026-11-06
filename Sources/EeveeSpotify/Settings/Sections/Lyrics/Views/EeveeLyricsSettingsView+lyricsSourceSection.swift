@@ -52,6 +52,18 @@ extension EeveeLyricsSettingsView {
                     lrclibURLField()
                 }
             }
+
+            if viewModel.lyricsSource == .spicylyrics {
+                Section(footer: Text("spicy_token_sharing_description".localized)) {
+                    Toggle(
+                        "spicy_token_sharing".localized,
+                        isOn: Binding<Bool>(
+                            get: { UserDefaults.spicyShareSpotifyToken },
+                            set: { UserDefaults.spicyShareSpotifyToken = $0 }
+                        )
+                    )
+                }
+            }
         }
     }
     

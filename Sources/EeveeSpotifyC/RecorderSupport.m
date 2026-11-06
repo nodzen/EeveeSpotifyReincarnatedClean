@@ -715,7 +715,7 @@ static NSString *EVExportAIFF(NSURL *src, NSURL *dst, uint32_t rate, NSDictionar
     FILE *file = fopen(tmp.path.fileSystemRepresentation, "wb");
     if (!file) return [NSString stringWithFormat:@"cannot create AIFF (errno %d)", errno];
     BOOL ok = fwrite(headerData.bytes, 1, headerData.length, file) == headerData.length;
-    uint8_t zero[8] = {0}; if (ok) ok = fwrite(zero, 1, 8, file) == 8;
+    uint8_t zero[8] = {0};
     const float *samples = (const float *)((const uint8_t *)wav.bytes + 44);
     NSMutableData *block = [NSMutableData dataWithLength:32768]; uint8_t *dstBytes = block.mutableBytes;
     NSDate *lastProgress = [NSDate date];
@@ -804,7 +804,10 @@ static NSString *EVExportM4A(NSURL *src, NSURL *dst, BOOL lossless, uint32_t rat
     [writer addInput:in];
     writer.metadata = meta;
     if (![reader startReading]) return reader.error.localizedDescription ?: @"cannot read WAV";
-    [writer startWriting];
+    if (![writer startWriting]) {
+        [reader cancelReading];
+        return writer.error.localizedDescription ?: @"cannot start M4A writer";
+    }
     [writer startSessionAtSourceTime:kCMTimeZero];
     dispatch_semaphore_t sem = dispatch_semaphore_create(0);
     dispatch_queue_t q = dispatch_queue_create("eevee.recorder.export", DISPATCH_QUEUE_SERIAL);
@@ -819,7 +822,14 @@ static NSString *EVExportM4A(NSURL *src, NSURL *dst, BOOL lossless, uint32_t rat
             }
         }
     }];
-    dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
+    // A failed writer may never invoke the finish callback. Do not pin the
+    // finalize queue forever; large recordings still get ten minutes.
+    if (dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, 600 * NSEC_PER_SEC)) != 0) {
+        [in markAsFinished];
+        [reader cancelReading];
+        [writer cancelWriting];
+        return @"export timed out";
+    }
     return writer.status == AVAssetWriterStatusCompleted ? nil : (writer.error.localizedDescription ?: @"export failed");
 }
 

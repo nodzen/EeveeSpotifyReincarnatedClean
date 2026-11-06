@@ -128,6 +128,7 @@ final class SponsorBlockSkipper {
 
         if options.verboseLogging, !uriString.isEmpty {
             queue.async {
+                if self.probedURIs.count >= 500 { self.probedURIs.removeAll() }
                 if self.probedURIs.insert(uriString).inserted {
                     self.dumpTrackProbe(trackObj: trackObj, uri: uriString,
                                          isPodcast: isPodcastFlag, isVideo: isVideoFlag)
@@ -399,6 +400,7 @@ final class SponsorBlockSkipper {
                     self.broadcastSegments()
                     if merged.isEmpty {
                         if segs.isEmpty {
+                            if self.emptyEpisodeIDs.count >= 200 { self.emptyEpisodeIDs.removeAll() }
                             self.emptyEpisodeIDs.insert(episodeID)
                             writeDebugLog("[SB] no segments for \(episodeID) (cached empty)")
                         }
@@ -520,11 +522,10 @@ final class SponsorBlockSkipper {
         return nil
     }
 
-    // Some player observers report seconds, others ms. Use 10_000 as the gate:
-    // any audio > 2.7h would exceed this in seconds, but Spotify episodes don't.
+    // Some player observers report seconds, others ms. The gate must sit above
+    // long episodes in seconds (a 3h episode is ~10,800s), so use 100_000.
     private func normalizeSeconds(_ raw: Double, durationHint: Double) -> Double {
-        if raw > 10_000 { return raw / 1000.0 }
-        if durationHint > 10_000 { return raw / 1000.0 }
+        if durationHint > 100_000 || raw > 100_000 { return raw / 1000.0 }
         return raw
     }
 

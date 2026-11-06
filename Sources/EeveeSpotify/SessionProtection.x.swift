@@ -50,9 +50,11 @@ class SPTAuthSessionHook: ClassHook<NSObject> {
     }
 
     func destroy() {
-        let elapsed = Int(Date().timeIntervalSince(tweakInitTime))
-        let trace = Thread.callStackSymbols.prefix(12).joined(separator: "\n")
-        writeDebugLog("[AUTH] session destroy forwarded at \(elapsed)s\n[TRACE] \(trace)")
+        if EeveeDebug.enabled {
+            let elapsed = Int(Date().timeIntervalSince(tweakInitTime))
+            let trace = Thread.callStackSymbols.prefix(12).joined(separator: "\n")
+            writeDebugLog("[AUTH] session destroy forwarded at \(elapsed)s\n[TRACE] \(trace)")
+        }
         orig.destroy()
     }
 

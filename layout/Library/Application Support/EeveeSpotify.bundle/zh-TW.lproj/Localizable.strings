@@ -166,7 +166,7 @@ debug_section_footer = "匯出或清理除錯日誌。";
 
 // Full reset
 resetButtonTitle = "完整重置";
-resetSubtitle = "清理 Spotify 鑰匙圈（Keychain）、沙箱（Sandbox）目錄與應用程式組容器(App-group container)，並會強制重新登錄，完成時將自動退出。";
+fullResetSubtitle = "清理 Spotify 鑰匙圈（Keychain）、沙箱（Sandbox）目錄與應用程式組容器(App-group container)，並會強制重新登錄，完成時將自動退出。";
 resetFooter = "清理 Spotify 鑰匙圈（Keychain）、沙箱（Sandbox）目錄與應用程式組容器(App-group container)，並會強制重新登錄，完成時將自動退出。不會影響到其他應用程式。";
 
 // Settings Bar

@@ -170,14 +170,16 @@ class SpicyLyricsRepository: LyricsRepository {
         request.setValue("en-Latn-US,en-US;q=0.9,en-Latn;q=0.8,en;q=0.7", forHTTPHeaderField: "Accept-Language")
         request.setValue("u=1, i",                            forHTTPHeaderField: "priority")
 
-        // Wait for the Spotify Bearer token — mirrors Platform.GetSpotifyAccessToken()
-        // in the Spicetify extension. Without a valid token the API returns non-200
-        // immediately, which falsely triggers Genius fallback.
-        if let token = waitForToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: SpicyLyricsRepository.authHeaderKey)
-            writeDebugLog("[SpicyLyrics] Using captured token for \(trackId)")
-        } else {
-            writeDebugLog("[SpicyLyrics] No token available for \(trackId) — proceeding unauthenticated")
+        // The Spotify bearer token can act as the user, so it is only sent
+        // after explicit consent in Settings. Without it the API may reject
+        // the request, but no account credential leaves the device.
+        if UserDefaults.spicyShareSpotifyToken {
+            if let token = waitForToken() {
+                request.setValue("Bearer \(token)", forHTTPHeaderField: SpicyLyricsRepository.authHeaderKey)
+                writeDebugLog("[SpicyLyrics] Using captured token for \(trackId)")
+            } else {
+                writeDebugLog("[SpicyLyrics] No token available for \(trackId) — proceeding unauthenticated")
+            }
         }
 
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)

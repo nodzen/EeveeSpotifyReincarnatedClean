@@ -9,14 +9,10 @@ private func showHavePremiumPopUp() {
 }
 
 class SpotifySessionDelegateBootstrapHook: ClassHook<NSObject>, SpotifySessionDelegate {
-    // This hook is the *core* of premium patching (intercepts bootstrap and mutates UCS).
-    typealias Group = PremiumBootstrapGroup
-    static var targetName: String {
-        switch EeveeSpotify.hookTarget {
-        case .lastAvailableiOS14: return "SPTCoreURLSessionDataDelegate"
-        default: return "SPTDataLoaderService"
-        }
-    }
+    // 8.9.8 only. Newer versions use the shared SpotifyResponsePatcher through
+    // SPTDataLoaderServiceHook; hooking both buffered and patched bootstrap twice.
+    typealias Group = IOS14BootstrapGroup
+    static let targetName = "SPTCoreURLSessionDataDelegate"
     
     func URLSession(
         _ session: URLSession,
@@ -32,10 +28,9 @@ class SpotifySessionDelegateBootstrapHook: ClassHook<NSObject>, SpotifySessionDe
         dataTask task: URLSessionDataTask,
         didReceiveData data: Data
     ) {
-        guard 
-            let request = task.currentRequest,
-            let url = request.url
-        else {
+        guard let url = task.currentRequest?.url ?? task.originalRequest?.url else {
+            // Never swallow body bytes: the patched path may still need them.
+            orig.URLSession(session, dataTask: task, didReceiveData: data)
             return
         }
         
@@ -52,10 +47,10 @@ class SpotifySessionDelegateBootstrapHook: ClassHook<NSObject>, SpotifySessionDe
         task: URLSessionDataTask,
         didCompleteWithError error: Error?
     ) {
-        guard
-            let request = task.currentRequest,
-            let url = request.url
-        else {
+        guard let url = task.currentRequest?.url ?? task.originalRequest?.url else {
+            // A task with no URL must still receive its completion, or Spotify
+            // waits forever for the bootstrap response.
+            orig.URLSession(session, task: task, didCompleteWithError: error)
             return
         }
         

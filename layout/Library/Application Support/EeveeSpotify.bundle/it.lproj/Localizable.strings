@@ -155,7 +155,7 @@ debug_section_footer = "Esporta o elimina i Log di Debug.";
 
 // Full reset
 "resetButtonTitle" = "Ripristino completo";
-"resetSubtitle" = "Svuota il portachiavi di Spotify, le directory sandbox e i container app-group. Forza un nuovo accesso. L'app si chiuderà al termine.";
+"fullResetSubtitle" = "Svuota il portachiavi di Spotify, le directory sandbox e i container app-group. Forza un nuovo accesso. L'app si chiuderà al termine.";
 "resetFooter" = "Forza un nuovo accesso. Svuota le voci del portachiavi di Spotify, le directory sandbox e i container app-group. Le altre app in sideload non subiranno modifiche. L'app si chiuderà al termine.";
 
 // Settings Bar

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct EeveeSettingsVersionView: View {
     @State private var latestVersion: String?
+    @State private var didFinishLoading = false
     @State private var isPresentingContributorsSheet = false
     
     private func loadVersion() async throws {
@@ -49,7 +50,7 @@ struct EeveeSettingsVersionView: View {
             VStack(alignment: .leading) {
                 Text("v\(EeveeSpotify.version)")
                 
-                if latestVersion == nil {
+                if latestVersion == nil && !didFinishLoading {
                     HStack(spacing: 10) {
                         ProgressView()
                         Text("checking_for_update".localized)
@@ -73,6 +74,7 @@ struct EeveeSettingsVersionView: View {
         .onAppear {
             Task {
                 try? await loadVersion()
+                didFinishLoading = true
             }
         }
     }

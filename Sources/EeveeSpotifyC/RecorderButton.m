@@ -5,6 +5,7 @@
 #import <objc/runtime.h>
 #import <math.h>
 #import "EVRecorderInternal.h"
+#import "include/EVAudioKey.h"
 
 typedef NS_ENUM(NSInteger, EVRecState) { EVRecIdle, EVRecStarting, EVRecRecording, EVRecStopping };
 
@@ -819,6 +820,27 @@ static void evInstallPlayerButtonHook(int attempt) {
     [a addAction:[UIAlertAction actionWithTitle:@"Export last session as AAC (.m4a)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *x) { [ws exportLast:@"aac"]; }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Export last session as Lossless (ALAC .m4a)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *x) { [ws exportLast:@"alac"]; }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Export last session as AIFF (.aiff)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *x) { [ws exportLast:@"aiff"]; }]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Grab current stream (key)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *x) {
+        [ui showToastTitle:@"Grab" sub:@"Fetching the stream and decrypting it…" image:nil duration:8];
+        EVAudioKeyGrabCurrent(^(BOOL ok, NSString *text, NSURL *file) {
+            [ui showToastTitle:ok ? @"Saved" : @"Grab failed" sub:text image:nil duration:12];
+            if (ok && file) [ui shareURLs:@[file]];
+        });
+    }]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Export stream diagnostics" style:UIAlertActionStyleDefault handler:^(UIAlertAction *x) {
+        UIAlertController *warn = [UIAlertController alertControllerWithTitle:@"Export stream diagnostics?"
+            message:@"The folder contains captured stream URLs and decryption keys. Share it only with someone you trust."
+            preferredStyle:UIAlertControllerStyleAlert];
+        [warn addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+        [warn addAction:[UIAlertAction actionWithTitle:@"Export" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *y) {
+            [ui showToastTitle:@"Diagnostics" sub:@"Collecting URLs, manifest and key stores…" image:nil duration:6];
+            EVAudioKeyExportDiagnostics(^(NSURL *folder, NSString *summary) {
+                [ui showToastTitle:@"Diagnostics" sub:summary image:nil duration:10];
+                if (folder) [ui shareURLs:@[folder]];
+            });
+        }]];
+        [self presentViewController:warn animated:YES completion:nil];
+    }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Dump Lottie views to log" style:UIAlertActionStyleDefault handler:^(UIAlertAction *x) { [ui dumpLottieToLog]; }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Next anchor candidate" style:UIAlertActionStyleDefault handler:^(UIAlertAction *x) { [ui nextAnchor]; }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Clear log" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *x) { EVLogClear(); }]];
@@ -880,6 +902,7 @@ NSString *EeveeRecorderDebugReport(void) {
     NSMutableArray *l = [NSMutableArray array];
     [l addObjectsFromArray:EVCoreDebugLines()];
     [l addObjectsFromArray:EVMetaDebugLines()];
+    [l addObjectsFromArray:EVAudioKeyDebugLines()];
     [l addObjectsFromArray:[[EVRecUI shared] uiDebugLines]];
     [l addObject:[NSString stringWithFormat:@"log file: %@", EVLogPath()]];
     [l addObject:[NSString stringWithFormat:@"recordings: %@", EVRecordingsRoot().path]];
@@ -893,15 +916,6 @@ void EeveeRecorderPresentDebugPanel(void) {
         UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:[EVDebugVC new]];
         [top presentViewController:nav animated:YES completion:nil];
     });
-}
-
-BOOL EeveeRecorderShowButton(void) {
-    return EVSettingBool(@"showButton", YES);
-}
-
-void EeveeRecorderSetShowButton(BOOL show) {
-    EVSetSettingBool(@"showButton", show);
-    [[EVRecUI shared] setRecordVisible:show];
 }
 
 void EeveeRecorderApplyEnabledState(void) {
@@ -920,6 +934,7 @@ void EeveeRecorderApplyEnabledState(void) {
 void EeveeAudioRecorderSetEnabled(BOOL enabled) {
     BOOL was = EeveeAudioRecorderEnabled();
     EVSetSettingBool(@"recordEnabled", enabled);
+    if (enabled) EVAudioKeySetEnabled(YES);
     if (!enabled) EeveeAudioRecorderStop();
     EeveeRecorderSetTapEnabled(enabled);
     if (was != enabled || enabled) EeveeRecorderApplyEnabledState();

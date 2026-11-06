@@ -29,9 +29,6 @@ BOOL EeveeAudioRecorderEnabled(void);
 void EeveeAudioRecorderSetEnabled(BOOL enabled);
 // NO when the process has no inline-hooking shim (plain sideload without JIT).
 BOOL EeveeAudioRecorderSupported(void);
-// On-screen record button preference. Takes effect on the next launch.
-BOOL EeveeRecorderShowButton(void);
-void EeveeRecorderSetShowButton(BOOL show);
 
 // New API
 NSString *EeveeAudioRecorderLastError(void);          // why the last Start failed, nil if none

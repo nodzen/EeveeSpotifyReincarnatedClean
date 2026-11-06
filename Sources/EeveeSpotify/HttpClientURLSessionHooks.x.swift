@@ -17,11 +17,14 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
             SpotifyAccessTokenStore.capture(from: request)
         }
 
-        guard let url = task.currentRequest?.url else {
-            if let fallback = task.originalRequest?.url,
-               fallback.isLyrics || ScrollsitaLyricsCardPatcher.shouldHandle(fallback) {
-                writeDebugLog("[HCUS] completion without currentRequest path=\(fallback.path) (taskId=\(task.taskIdentifier))")
-            }
+        let url = task.currentRequest?.url ?? task.originalRequest?.url
+        guard let url else {
+            // A task can lose currentRequest after a redirect or cancel. Drop
+            // buffered state and always deliver the completion, or the caller hangs.
+            _ = LyricsResponseGate.take(for: task)
+            URLSessionHelper.shared.discardData(for: task)
+            _ = SpotifyResponsePatcher.consumeCustomizeTask(task)
+            _ = SpotifyResponsePatcher.consumeSyntheticLyricsTask(task)
             orig.URLSession(session, task: task, didCompleteWithError: error)
             return
         }
@@ -226,7 +229,10 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
         dataTask task: URLSessionDataTask,
         didReceiveData data: Data
     ) {
-        guard let url = task.currentRequest?.url else { return }
+        guard let url = task.currentRequest?.url ?? task.originalRequest?.url else {
+            orig.URLSession(session, dataTask: task, didReceiveData: data)
+            return
+        }
         if SpotifyResponseBlockPolicy.shouldBlock(url) { return }
         if CasitaResponseProbe.shouldProbe(url) {
             CasitaResponseProbe.append(data, for: task)

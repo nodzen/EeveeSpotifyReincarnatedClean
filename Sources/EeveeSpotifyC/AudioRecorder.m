@@ -532,6 +532,13 @@ static void evTapDeactivate(void) {
     AURenderCallbackStruct original = { ctx->original, ctx->originalRefCon };
     OSStatus status = originalSetProperty(ctx->unit, kAudioUnitProperty_SetRenderCallback,
                                           ctx->scope, ctx->element, &original, sizeof(original));
+    if (status == noErr) {
+        pthread_mutex_lock(&tapPendingLock);
+        tapPending = (EVTapPending){ ctx->unit, ctx->scope, ctx->element, ctx->original,
+                                     ctx->originalRefCon, true };
+        pthread_mutex_unlock(&tapPendingLock);
+    }
+    // Leaked on purpose: a render callback may still be in flight on the audio thread.
     EVI("Tap", @"render callback restored (%d)", (int)status);
 }
 

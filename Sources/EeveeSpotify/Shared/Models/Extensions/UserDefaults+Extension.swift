@@ -20,6 +20,8 @@ extension UserDefaults {
     private static let blockSpotifyAnalyticsKey = "blockSpotifyAnalytics"
     private static let debugLoggingEnabledKey = "debugLoggingEnabled"
     private static let blockRatingPromptsKey = "blockRatingPrompts"
+    private static let spicyShareSpotifyTokenKey = "spicyShareSpotifyToken"
+    private static let uncensorCrossProviderKey = "uncensorCrossProvider"
 
     static var musixmatchToken: String {
         get {
@@ -157,6 +159,28 @@ extension UserDefaults {
         }
     }
 
+    /// Sends the Spotify account bearer token to the Spicy Lyrics API.
+    /// Off by default: the token can act as the user until it expires.
+    static var spicyShareSpotifyToken: Bool {
+        get {
+            container.object(forKey: spicyShareSpotifyTokenKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: spicyShareSpotifyTokenKey)
+        }
+    }
+
+    /// Allows the lyrics uncensor pass to query providers other than the one
+    /// selected for playback. Off by default to avoid hidden third-party calls.
+    static var uncensorCrossProvider: Bool {
+        get {
+            container.object(forKey: uncensorCrossProviderKey) as? Bool ?? false
+        }
+        set {
+            container.set(newValue, forKey: uncensorCrossProviderKey)
+        }
+    }
+
     /// Enables the file-backed diagnostic log in normal release builds.
     /// Keep this opt-in because the log may contain track and request metadata.
     static var debugLoggingEnabled: Bool {
@@ -189,6 +213,8 @@ extension UserDefaults {
             blockSpotifyAnalyticsKey,
             debugLoggingEnabledKey,
             blockRatingPromptsKey,
+            spicyShareSpotifyTokenKey,
+            uncensorCrossProviderKey,
             "experimentsOptions",
             "com.apple.SwiftUI.DisableSolarium",
         ]

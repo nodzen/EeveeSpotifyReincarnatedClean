@@ -166,7 +166,7 @@ debug_section_footer = "Hata günlüğünü dışa aktarın veya temizleyin.";
 
 // Full reset
 resetButtonTitle = "Tam Sıfırlama";
-resetSubtitle = "Spotify keychain kayıtlarını, sandbox dizinlerini ve app-group kapsayıcılarını temizler. Yeniden giriş yapmaya zorlar. İşlem bittiğinde uygulama kapanır.";
+fullResetSubtitle = "Spotify keychain kayıtlarını, sandbox dizinlerini ve app-group kapsayıcılarını temizler. Yeniden giriş yapmaya zorlar. İşlem bittiğinde uygulama kapanır.";
 resetFooter = "Yeniden giriş yapmaya zorlar. Spotify keychain girdilerini, sandbox dizinlerini ve app-group kapsayıcılarını temizler. Haricen yüklenen diğer uygulamalara dokunulmaz. İşlem bittiğinde uygulama kapanır.";
 
 // Settings Bar

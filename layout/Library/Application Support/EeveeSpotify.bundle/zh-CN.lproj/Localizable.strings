@@ -158,7 +158,7 @@ debug_section_footer = "导出或清除调试日志。";
 
 // Full reset
 resetButtonTitle = "完全重置";
-resetSubtitle = "清除 Spotify 钥匙串、沙盒目录和应用组容器。强制重新登录。完成后应用退出。";
+fullResetSubtitle = "清除 Spotify 钥匙串、沙盒目录和应用组容器。强制重新登录。完成后应用退出。";
 resetFooter = "强制重新登录。清除 Spotify 钥匙串、沙盒目录和应用组容器，其他旁加载的应用不受影响。完成后应用退出。";
 
 // App Icon Chooser
