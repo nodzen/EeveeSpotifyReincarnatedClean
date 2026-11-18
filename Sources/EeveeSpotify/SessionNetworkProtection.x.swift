@@ -55,6 +55,16 @@ class URLSessionTaskResumeHook: ClassHook<NSObject> {
                 return
             }
 
+            // The core's ad tasks never reach the HTTP response hooks, so an
+            // ad request that resumed was already leaking. Cancel it before it
+            // reaches the wire - same predicate as the response-level blockers.
+            if url.isAdRelated {
+                writeDebugLog("[ORACLE][NET_BLOCK] Cancelled ad task at \(elapsedInt)s: \(host)\(path)")
+                task.cancel()
+                orig.resume()
+                return
+            }
+
             let isAuthRelated = host.contains("login5") ||
                 host.contains("apresolve") ||
                 (host.contains("googleapis.com") && path.contains("/token")) ||

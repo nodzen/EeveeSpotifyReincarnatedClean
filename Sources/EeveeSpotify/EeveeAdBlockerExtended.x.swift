@@ -6,6 +6,7 @@
 import Orion
 import Foundation
 import UIKit
+import ObjectiveC.runtime
 
 // Every service has its own group. Spotify rolls these modules out
 // independently, so one missing/renamed class must not disable the rest of the
@@ -24,6 +25,19 @@ struct SponsoredCtxAttachmentGroup: HookGroup {}
 struct ScrollFeedAdViewGroup: HookGroup {}
 struct ScrollFeedAdServiceGroup: HookGroup {}
 struct ScrollFeedAdControllerGroup: HookGroup {}
+struct RealTimeAdControllerServiceGroup: HookGroup {}
+struct AdsBaseSwiftServiceGroup: HookGroup {}
+struct AdsBaseServiceGroup: HookGroup {}
+struct AudioAdPiPCoordinatorServiceGroup: HookGroup {}
+struct AdsInstrumentationServiceGroup: HookGroup {}
+struct AdsElementServiceGroup: HookGroup {}
+struct RewardedAdFetchControllerServiceGroup: HookGroup {}
+struct AdOnAppOpenServiceGroup: HookGroup {}
+struct EmbeddedCTACardsServiceGroup: HookGroup {}
+struct EmbeddedPlaylistServiceGroup: HookGroup {}
+struct NativeAdsElementServiceGroup: HookGroup {}
+struct OnDemandAdEventLoggerServiceGroup: HookGroup {}
+struct CoreURLSessionAdsGroup: HookGroup {}
 
 private let killAdsServiceImpl         = true
 private let killInStreamAdsService     = true
@@ -67,7 +81,7 @@ func findTweakClass(_ name: String) -> AnyClass? {
     for i in 0..<Int(n) {
         let raw = UnsafeRawPointer(buf).load(fromByteOffset: i * MemoryLayout<UnsafeRawPointer>.size,
                                               as: UnsafeRawPointer.self)
-        let cls: AnyClass = unsafeBitCast(raw, to: AnyClass.self)
+        let cls = unsafeBitCast(raw, to: AnyClass.self)
         classListByNameCache[String(cString: class_getName(cls))] = cls
     }
     classListByNameCacheBuilt = true
@@ -207,18 +221,19 @@ class SponsoredCtxAttachmentProbe: ClassHook<NSObject> {
 // ImageBrandAd) is rendered by EmbeddedAdAdapterElementUI, and
 // EmbeddedCTAElementsServiceImpl provisions the embedded-CTA/ad adapter tree.
 // Same hide-on-attach pattern as SponsoredPlaylistHeaderViewKill above.
-class EmbeddedAdAdapterElementUIKill: ClassHook<UIView> {
+class EmbeddedAdAdapterElementUIKill: ClassHook<NSObject> {
     typealias Group = ScrollFeedAdViewGroup
     static let targetName =
         "_TtC35AdsEmbedded_EmbeddedCTAElementsImpl26EmbeddedAdAdapterElementUI"
 
     func didMoveToSuperview() {
         orig.didMoveToSuperview()
-        target.isHidden = true
-        target.isUserInteractionEnabled = false
-        if target.superview != nil {
+        guard let view = target as? UIView else { return }
+        view.isHidden = true
+        view.isUserInteractionEnabled = false
+        if view.superview != nil {
             adlog("EmbeddedAdAdapterElementUI (scroll-feed ad card)")
-            target.removeFromSuperview()
+            view.removeFromSuperview()
         }
     }
 }
@@ -246,9 +261,240 @@ class EmbeddedAdControllerServiceImplKill: ClassHook<NSObject> {
     }
 }
 
+// Broader embedded-ad pipeline kills (every name verified in the 9.1.84
+// binary). The scroll card rendered despite the EmbeddedAdAdapterElementUI
+// view kill, so the pipeline is starved one layer deeper and sibling render
+// paths are covered too.
+class EmbeddedAdAdapterElementProviderKill: ClassHook<NSObject> {
+    typealias Group = ScrollFeedAdControllerGroup
+    static let targetName =
+        "_TtC35AdsEmbedded_EmbeddedCTAElementsImpl32EmbeddedAdAdapterElementProvider"
+
+    func load() {
+        adlog("EmbeddedAdAdapterElementProvider.load")
+    }
+}
+
+// Playlist-feed ad controllers (EmbeddedAd sections injected into playlist
+// scroll contexts; sibling pipeline of the NPV scroll feed).
+class PlaylistAdControllerV2Kill: ClassHook<NSObject> {
+    typealias Group = ScrollFeedAdControllerGroup
+    static let targetName =
+        "_TtC32AdsEmbedded_EmbeddedPlaylistImpl22PlaylistAdControllerV2"
+
+    func load() {
+        adlog("PlaylistAdControllerV2.load")
+    }
+}
+
+class PlaylistAdControllerImplKill: ClassHook<NSObject> {
+    typealias Group = ScrollFeedAdControllerGroup
+    static let targetName =
+        "_TtC32AdsEmbedded_EmbeddedPlaylistImpl24PlaylistAdControllerImpl"
+
+    func load() {
+        adlog("PlaylistAdControllerImpl.load")
+    }
+}
+
+// Leavebehind ad elements under the player (EmbeddedAdPresentationKit).
+class LeavebehindAdElementProviderKill: ClassHook<NSObject> {
+    typealias Group = ScrollFeedAdControllerGroup
+    static let targetName =
+        "_TtC37AdsEmbedded_EmbeddedAdPresentationKit28LeavebehindAdElementProvider"
+
+    func load() {
+        adlog("LeavebehindAdElementProvider.load")
+    }
+}
+
+// Spotify 9.1.88 real-time ad controller and sibling Swift ad services.
+class RealTimeAdControllerServiceKill: ClassHook<NSObject> {
+    typealias Group = RealTimeAdControllerServiceGroup
+    static let targetName =
+        "_TtC36AdsPlatform_RealTimeAdControllerImpl31RealTimeAdControllerServiceImpl"
+
+    func load() {
+        adlog("RealTimeAdControllerServiceImpl.load")
+    }
+}
+
+class AdsBaseSwiftServiceKill: ClassHook<NSObject> {
+    typealias Group = AdsBaseSwiftServiceGroup
+    static let targetName =
+        "_TtC28AdsPlatform_AdsBaseSwiftImpl23AdsBaseSwiftServiceImpl"
+
+    func load() {
+        adlog("AdsBaseSwiftServiceImpl.load")
+    }
+}
+
+// Spotify 9.2 replaced AdsPlatform_AdsBaseSwiftImpl with AdsPlatform_AdsBaseImpl.
+class AdsBaseServiceKill: ClassHook<NSObject> {
+    typealias Group = AdsBaseServiceGroup
+    static let targetName =
+        "_TtC23AdsPlatform_AdsBaseImpl18AdsBaseServiceImpl"
+
+    func load() {
+        adlog("AdsBaseServiceImpl.load")
+    }
+}
+
+class AudioAdPiPCoordinatorServiceKill: ClassHook<NSObject> {
+    typealias Group = AudioAdPiPCoordinatorServiceGroup
+    static let targetName =
+        "_TtC46Betamax_AudioAdPictureInPictureCoordinatorImpl41AudioAdPictureInPictureCoordinatorService"
+
+    func load() {
+        adlog("AudioAdPictureInPictureCoordinatorService.load")
+    }
+}
+
+class AdsInstrumentationServiceKill: ClassHook<NSObject> {
+    typealias Group = AdsInstrumentationServiceGroup
+    static let targetName =
+        "_TtC34AdsPlatform_AdsInstrumentationImpl29AdsInstrumentationServiceImpl"
+
+    func load() {
+        adlog("AdsInstrumentationServiceImpl.load")
+    }
+}
+
+class AdsElementServiceKill: ClassHook<NSObject> {
+    typealias Group = AdsElementServiceGroup
+    static let targetName =
+        "_TtC23AdsPlatform_ElementImpl18ElementServiceImpl"
+
+    func load() {
+        adlog("ElementServiceImpl.load")
+    }
+}
+
+class RewardedAdFetchControllerServiceKill: ClassHook<NSObject> {
+    typealias Group = RewardedAdFetchControllerServiceGroup
+    static let targetName =
+        "_TtC28AdsStandalone_RewardedAdImpl32RewardedAdFetchControllerService"
+
+    func load() {
+        adlog("RewardedAdFetchControllerService.load")
+    }
+}
+
+class AdOnAppOpenServiceKill: ClassHook<NSObject> {
+    typealias Group = AdOnAppOpenServiceGroup
+    static let targetName =
+        "_TtC29AdsStandalone_AdOnAppOpenImpl22AdOnAppOpenServiceImpl"
+
+    func load() {
+        adlog("AdOnAppOpenServiceImpl.load")
+    }
+}
+
+class EmbeddedCTACardsServiceKill: ClassHook<NSObject> {
+    typealias Group = EmbeddedCTACardsServiceGroup
+    static let targetName =
+        "_TtC32AdsEmbedded_EmbeddedCTACardsImpl23EmbeddedCTACardsService"
+
+    func load() {
+        adlog("EmbeddedCTACardsService.load")
+    }
+}
+
+class EmbeddedPlaylistServiceKill: ClassHook<NSObject> {
+    typealias Group = EmbeddedPlaylistServiceGroup
+    static let targetName =
+        "_TtC32AdsEmbedded_EmbeddedPlaylistImpl27EmbeddedPlaylistServiceImpl"
+
+    func load() {
+        adlog("EmbeddedPlaylistServiceImpl.load")
+    }
+}
+
+class NativeAdsElementServiceKill: ClassHook<NSObject> {
+    typealias Group = NativeAdsElementServiceGroup
+    static let targetName =
+        "_TtC21NativeAds_ElementImpl27NativeAdsElementServiceImpl"
+
+    func load() {
+        adlog("NativeAdsElementServiceImpl.load")
+    }
+}
+
+class OnDemandAdEventLoggerServiceKill: ClassHook<NSObject> {
+    typealias Group = OnDemandAdEventLoggerServiceGroup
+    static let targetName =
+        "_TtC28AdsStandalone_RewardedAdImpl28OnDemandAdEventLoggerService"
+
+    func load() {
+        adlog("OnDemandAdEventLoggerService.load")
+    }
+}
+
+// HTML-backed brand-ad creative. NSObject-based with an internal cast:
+// ElementUI classes have proven non-UIView on some 9.1.x builds.
+class HtmlAdElementUIKill: ClassHook<NSObject> {
+    typealias Group = ScrollFeedAdViewGroup
+    static let targetName =
+        "_TtC22AdsPlatform_ElementKit15HtmlAdElementUI"
+
+    func didMoveToSuperview() {
+        orig.didMoveToSuperview()
+        guard let view = target as? UIView else { return }
+        view.isHidden = true
+        view.isUserInteractionEnabled = false
+        if view.superview != nil {
+            adlog("HtmlAdElementUI")
+            view.removeFromSuperview()
+        }
+    }
+}
+
+// DSA ad-transparency overlay (AdsPlatform_DSAImpl) — ad-only surface.
+class DSAMainViewKill: ClassHook<NSObject> {
+    typealias Group = ScrollFeedAdViewGroup
+    static let targetName =
+        "_TtC19AdsPlatform_DSAImpl11DSAMainView"
+
+    func didMoveToSuperview() {
+        orig.didMoveToSuperview()
+        guard let view = target as? UIView else { return }
+        view.isHidden = true
+        view.isUserInteractionEnabled = false
+        if view.superview != nil {
+            adlog("DSAMainView")
+            view.removeFromSuperview()
+        }
+    }
+}
+
+// In-stream audio ads (#198, #212). The player core does its HTTP through its
+// own URLSession delegate, SPTCoreURLSessionDataDelegate, not through
+// SPTDataLoaderService or HttpClientURLSession, so the /ads/ and /ad-logic/
+// blocks in SpotifyResponsePatcher never see the core's ad-break requests
+// (ads/v3/ads, ad-logic/prefetch, ad-logic/v3/config, ...). Cancelling at the
+// response makes the core treat the ad fetch as failed and skip the break.
+class CoreURLSessionAdsKill: ClassHook<NSObject> {
+    typealias Group = CoreURLSessionAdsGroup
+    static let targetName = "SPTCoreURLSessionDataDelegate"
+
+    func URLSession(
+        _ session: URLSession,
+        dataTask task: URLSessionDataTask,
+        didReceiveResponse response: URLResponse,
+        completionHandler handler: @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
+        if let url = task.currentRequest?.url ?? task.originalRequest?.url, url.isAdRelated {
+            adlog("core request \(url.host ?? "?")\(url.path)")
+            handler(.cancel)
+            return
+        }
+        orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: handler)
+    }
+}
+
 func activateEeveeAdBlockerExtended() {
-    let loadSelector = NSSelectorFromString("load")
-    let initSelector = NSSelectorFromString("init")
+    let loadSelector = Selector(("load"))
+    let initSelector = Selector(("init"))
 
     let loadTargets: [(String, String, () -> Void)] = [
         (AdsServiceImplKill.targetName, "AdsServiceImpl", { AdsServiceImplGroup().activate() }),
@@ -260,68 +506,116 @@ func activateEeveeAdBlockerExtended() {
         (SponsoredContextNPBAttachmentServiceKill.targetName, "AdsSponsoredContextNPBAttachmentServiceImpl", { SponsoredContextNPBAttachmentServiceGroup().activate() }),
         (SponsoredPlaylistHeaderServiceKill.targetName, "AdsSponsoredPlaylistHeaderServiceImpl", { SponsoredPlaylistHeaderServiceGroup().activate() }),
         (NativeAdsLoggerServiceImplKill.targetName, "NativeAdsLoggerServiceImpl", { NativeAdsLoggerServiceGroup().activate() }),
+        (EmbeddedAdAdapterElementProviderKill.targetName, "EmbeddedAdAdapterElementProvider", { ScrollFeedAdControllerGroup().activate() }),
+        (PlaylistAdControllerV2Kill.targetName, "PlaylistAdControllerV2", { ScrollFeedAdControllerGroup().activate() }),
+        (PlaylistAdControllerImplKill.targetName, "PlaylistAdControllerImpl", { ScrollFeedAdControllerGroup().activate() }),
+        (LeavebehindAdElementProviderKill.targetName, "LeavebehindAdElementProvider", { ScrollFeedAdControllerGroup().activate() }),
+        (RealTimeAdControllerServiceKill.targetName, "RealTimeAdControllerServiceImpl", { RealTimeAdControllerServiceGroup().activate() }),
+        (AdsBaseSwiftServiceKill.targetName, "AdsBaseSwiftServiceImpl", { AdsBaseSwiftServiceGroup().activate() }),
+        (AdsBaseServiceKill.targetName, "AdsBaseServiceImpl", { AdsBaseServiceGroup().activate() }),
+        (AudioAdPiPCoordinatorServiceKill.targetName, "AudioAdPictureInPictureCoordinatorService", { AudioAdPiPCoordinatorServiceGroup().activate() }),
+        (AdsInstrumentationServiceKill.targetName, "AdsInstrumentationServiceImpl", { AdsInstrumentationServiceGroup().activate() }),
+        (AdsElementServiceKill.targetName, "ElementServiceImpl", { AdsElementServiceGroup().activate() }),
+        (RewardedAdFetchControllerServiceKill.targetName, "RewardedAdFetchControllerService", { RewardedAdFetchControllerServiceGroup().activate() }),
+        (AdOnAppOpenServiceKill.targetName, "AdOnAppOpenServiceImpl", { AdOnAppOpenServiceGroup().activate() }),
+        (EmbeddedCTACardsServiceKill.targetName, "EmbeddedCTACardsService", { EmbeddedCTACardsServiceGroup().activate() }),
+        (EmbeddedPlaylistServiceKill.targetName, "EmbeddedPlaylistServiceImpl", { EmbeddedPlaylistServiceGroup().activate() }),
+        (NativeAdsElementServiceKill.targetName, "NativeAdsElementServiceImpl", { NativeAdsElementServiceGroup().activate() }),
+        (OnDemandAdEventLoggerServiceKill.targetName, "OnDemandAdEventLoggerService", { OnDemandAdEventLoggerServiceGroup().activate() }),
     ]
 
     var activated = 0
     for (className, label, activate) in loadTargets {
-        guard let cls = NSClassFromString(className),
-              class_getInstanceMethod(cls, loadSelector) != nil else {
-            NSLog("[EeveeSpotify][AdBlock] %@/load unavailable; skipping", label)
+        guard let cls = findTweakClass(className) else {
+            ablog("\(label)/load unavailable: class not registered yet")
+            continue
+        }
+        guard class_getInstanceMethod(cls, loadSelector) != nil else {
+            ablog("\(label)/load unavailable: no load selector on \(NSStringFromClass(cls))")
             continue
         }
         activate()
         activated += 1
-        NSLog("[EeveeSpotify][AdBlock] %@ hook activated", label)
+        ablog("\(label) hook activated")
     }
 
-    if let cls = NSClassFromString(SponsoredCtxAttachmentProbe.targetName),
+    if let cls = findTweakClass(SponsoredCtxAttachmentProbe.targetName),
        class_getInstanceMethod(cls, initSelector) != nil {
         SponsoredCtxAttachmentGroup().activate()
         activated += 1
-        NSLog("[EeveeSpotify][AdBlock] SponsoredCtxAttachment hook activated")
+        ablog("SponsoredCtxAttachment hook activated")
     } else {
-        NSLog("[EeveeSpotify][AdBlock] SponsoredCtxAttachment/init unavailable; skipping")
+        ablog("SponsoredCtxAttachment/init unavailable; skipping")
     }
 
-    let viewSelector = NSSelectorFromString("didMoveToSuperview")
-    if let cls = NSClassFromString(SponsoredPlaylistHeaderViewKill.targetName) as? UIView.Type,
+    let viewSelector = Selector(("didMoveToSuperview"))
+    if let cls = findTweakClass(SponsoredPlaylistHeaderViewKill.targetName) as? UIView.Type,
        class_getInstanceMethod(cls, viewSelector) != nil {
         SponsoredPlaylistHeaderViewGroup().activate()
         activated += 1
-        NSLog("[EeveeSpotify][AdBlock] SponsoredPlaylistHeader view fallback activated")
+        ablog("SponsoredPlaylistHeader view fallback activated")
     } else {
-        NSLog("[EeveeSpotify][AdBlock] SponsoredPlaylistHeader view unavailable; skipping")
+        ablog("SponsoredPlaylistHeader view unavailable; skipping")
     }
 
     // Scroll-feed ad card (9.1.8x scrollsita): view-level hide + service-level
     // starvation. Both runtime-gated so older builds degrade gracefully.
-    if let cls = NSClassFromString(EmbeddedAdAdapterElementUIKill.targetName) as? UIView.Type,
+    // Orion rejects this class as non-UIView (9.1.84), so the NSObject hook
+    // below attaches only if a view-compatible method actually exists.
+    if let cls = findTweakClass(EmbeddedAdAdapterElementUIKill.targetName),
        class_getInstanceMethod(cls, viewSelector) != nil {
         ScrollFeedAdViewGroup().activate()
         activated += 1
-        NSLog("[EeveeSpotify][AdBlock] EmbeddedAdAdapterElementUI (scroll-feed ad) activated")
+        ablog("EmbeddedAdAdapterElementUI (scroll-feed ad) activated")
     } else {
-        NSLog("[EeveeSpotify][AdBlock] EmbeddedAdAdapterElementUI unavailable; skipping")
+        ablog("EmbeddedAdAdapterElementUI unavailable; skipping")
     }
 
-    if let cls = NSClassFromString(EmbeddedCTAElementsServiceImplKill.targetName),
+    if let cls = findTweakClass(EmbeddedCTAElementsServiceImplKill.targetName),
        class_getInstanceMethod(cls, loadSelector) != nil {
         ScrollFeedAdServiceGroup().activate()
         activated += 1
-        NSLog("[EeveeSpotify][AdBlock] EmbeddedCTAElementsServiceImpl activated")
+        ablog("EmbeddedCTAElementsServiceImpl activated")
     } else {
-        NSLog("[EeveeSpotify][AdBlock] EmbeddedCTAElementsServiceImpl unavailable; skipping")
+        ablog("EmbeddedCTAElementsServiceImpl unavailable; skipping")
     }
 
-    if let cls = NSClassFromString(EmbeddedAdControllerServiceImplKill.targetName),
+    if let cls = findTweakClass(EmbeddedAdControllerServiceImplKill.targetName),
        class_getInstanceMethod(cls, loadSelector) != nil {
         ScrollFeedAdControllerGroup().activate()
         activated += 1
-        NSLog("[EeveeSpotify][AdBlock] EmbeddedAdControllerServiceImpl activated")
+        ablog("EmbeddedAdControllerServiceImpl activated")
     } else {
-        NSLog("[EeveeSpotify][AdBlock] EmbeddedAdControllerServiceImpl unavailable; skipping")
+        ablog("EmbeddedAdControllerServiceImpl unavailable; skipping")
     }
 
-    NSLog("[EeveeSpotify][AdBlock] activated %d/%d compatible extended hooks",
-          activated, loadTargets.count + 5)
+    if let cls = findTweakClass(HtmlAdElementUIKill.targetName),
+       class_getInstanceMethod(cls, viewSelector) != nil {
+        ScrollFeedAdViewGroup().activate()
+        activated += 1
+        ablog("HtmlAdElementUI fallback activated")
+    } else {
+        ablog("HtmlAdElementUI unavailable; skipping")
+    }
+
+    if let cls = findTweakClass(DSAMainViewKill.targetName),
+       class_getInstanceMethod(cls, viewSelector) != nil {
+        ScrollFeedAdViewGroup().activate()
+        activated += 1
+        ablog("DSAMainView fallback activated")
+    } else {
+        ablog("DSAMainView unavailable; skipping")
+    }
+
+    let responseSelector = Selector(("URLSession:dataTask:didReceiveResponse:completionHandler:"))
+    if let cls = findTweakClass(CoreURLSessionAdsKill.targetName),
+       class_getInstanceMethod(cls, responseSelector) != nil {
+        CoreURLSessionAdsGroup().activate()
+        activated += 1
+        ablog("SPTCoreURLSessionDataDelegate ad-request block activated")
+    } else {
+        ablog("SPTCoreURLSessionDataDelegate unavailable; skipping")
+    }
+
+    ablog("activated \(activated)/\(loadTargets.count + 8) compatible extended hooks")
 }

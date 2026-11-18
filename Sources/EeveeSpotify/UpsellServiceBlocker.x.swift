@@ -17,6 +17,8 @@ struct DownloadUpsellServiceGroup: HookGroup {}
 struct FreeHostedJamsUpsellServiceGroup: HookGroup {}
 struct FreeUserSkipUpsellPageServiceGroup: HookGroup {}
 struct FreeUserShuffleUpsellPageServiceGroup: HookGroup {}
+struct ShuffleToggleUpsellServiceGroup: HookGroup {}
+struct PlayFullSongUpsellServiceGroup: HookGroup {}
 struct SelfLoadingUpsellBannerViewGroup: HookGroup {}
 
 class GeneralUpsellsServiceKill: ClassHook<NSObject> {
@@ -107,6 +109,32 @@ class FreeUserShuffleUpsellPageServiceKill: ClassHook<NSObject> {
     }
 }
 
+// Two free-tier upsell services intercept playback interactions that are
+// supposed to be Premium-gated but that free-tier UI still lets a user reach:
+// shuffle toggle (ContextualShuffle) and playing the full song (ReinventFree).
+// Suppressing load() makes the control work instead of showing an upsell.
+class ShuffleToggleUpsellServiceKill: ClassHook<NSObject> {
+    typealias Group = ShuffleToggleUpsellServiceGroup
+    static let targetName =
+        "_TtC28ContextualShuffle_UpsellImpl40ShuffleToggleUpsellServiceImplementation"
+
+    func load() {
+        upsellServiceLog("suppressed ShuffleToggleUpsellServiceImplementation.load")
+        return
+    }
+}
+
+class PlayFullSongUpsellServiceKill: ClassHook<NSObject> {
+    typealias Group = PlayFullSongUpsellServiceGroup
+    static let targetName =
+        "_TtC35ReinventFree_PlayFullSongUpsellImpl29PlayFullSongUpsellServiceImpl"
+
+    func load() {
+        upsellServiceLog("suppressed PlayFullSongUpsellServiceImpl.load")
+        return
+    }
+}
+
 // Language-independent fallback for the reusable Premium banner UIView.
 // DSA notices, library status and ordinary download progress use other classes.
 class SelfLoadingUpsellBannerViewKill: ClassHook<UIView> {
@@ -135,6 +163,8 @@ func activateUpsellServiceBlocker() {
         (FreeHostedJamsUpsellServiceKill.targetName, "FreeHostedJamsUpsellService", { FreeHostedJamsUpsellServiceGroup().activate() }),
         (FreeUserSkipUpsellPageServiceKill.targetName, "FreeUserSkipUpsellPageService", { FreeUserSkipUpsellPageServiceGroup().activate() }),
         (FreeUserShuffleUpsellPageServiceKill.targetName, "FreeUserShuffleUpsellSheetPageService", { FreeUserShuffleUpsellPageServiceGroup().activate() }),
+        (ShuffleToggleUpsellServiceKill.targetName, "ShuffleToggleUpsellServiceImplementation", { ShuffleToggleUpsellServiceGroup().activate() }),
+        (PlayFullSongUpsellServiceKill.targetName, "PlayFullSongUpsellServiceImpl", { PlayFullSongUpsellServiceGroup().activate() }),
     ]
 
     var activated = 0

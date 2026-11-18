@@ -67,4 +67,7 @@ compile_and_run lyrics-dto \
     Sources/EeveeSpotify/Lyrics/Models/LyricsRomanizationStatus.swift \
     Tests/LyricsDto/main.swift
 
+compile_and_run hook-source-audit \
+    Tests/HookSourceAudit/main.swift
+
 python3 Tests/ResolveConfigurationSnapshot/test.py
