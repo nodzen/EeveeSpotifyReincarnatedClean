@@ -110,6 +110,9 @@ have_premium_popup = "Wygląda na to, że masz aktywną subskrypcję Premium, wi
 high_audio_quality_popup = "Bardzo wysoka jakość dźwięku jest kontrolowana po stronie serwera i nie jest dostępna w tej modyfikacji.";
 playlist_downloading_popup = "Natywne pobieranie playlist jest kontrolowane po stronie serwera i nie jest dostępne w tej modyfikacji. Możesz jednak pobierać odcinki podcastów i lokalne listy odtwarzania";
 download_local_playlist = "Pobierz lokalną playlistę";
+local_playlist_download_button = "Pokazuj przycisk pobierania playlist";
+local_playlist_download_button_description = "Przycisk pobierania playlist synchronizuje tylko pliki lokalne przez Wi-Fi. Pobieranie utworów po stronie serwera pozostaje niedostępne. Uruchom Spotify ponownie po zmianie.";
+local_playlist_download_setting_hint = "Ten przycisk playlisty synchronizuje tylko pliki lokalne przez Wi-Fi. Możesz go ukryć w Ustawieniach EeveeSpotify → Pozostałe → Pokazuj przycisk pobierania playlist.";
 
 //
 

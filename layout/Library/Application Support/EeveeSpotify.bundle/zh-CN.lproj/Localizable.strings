@@ -90,6 +90,9 @@ have_premium_popup = "看来您有一个真实有效的 Premium 订阅，因此�
 high_audio_quality_popup = "非常高的音频质量是服务器端的，并且无法通过此插件获得。";
 playlist_downloading_popup = "原生播放列表下载是服务器端的，无法通过此插件下载。不过可以下载播客节目。";
 download_local_playlist = "下载本地播放列表";
+local_playlist_download_button = "显示播放列表下载按钮";
+local_playlist_download_button_description = "播放列表下载按钮仅通过 Wi-Fi 同步本地文件。服务器端的歌曲下载仍不可用。更改后请重启 Spotify。";
+local_playlist_download_setting_hint = "此播放列表按钮仅通过 Wi-Fi 同步本地文件。你可以在 EeveeSpotify 设置 → Miscellaneous → 显示播放列表下载按钮 中将其隐藏。";
 
 //
 

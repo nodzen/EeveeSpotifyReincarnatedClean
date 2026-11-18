@@ -107,6 +107,9 @@ have_premium_popup = "您看起來擁有可用的 Premium 訂閱，故 EeveeSpot
 high_audio_quality_popup = "極高音質為伺服器端控制，故 EeveeSpotify 無法啟用。";
 playlist_downloading_popup = "原生的歌曲下載功能為伺服器端控制，故 EeveeSpotify 無法啟用。不過您仍可下載播客和本機（區域網路）檔案。";
 download_local_playlist = "下載區域網路歌曲或播放清單";
+local_playlist_download_button = "顯示播放清單下載按鈕";
+local_playlist_download_button_description = "播放清單下載按鈕僅透過 Wi-Fi 同步本機檔案。伺服器端的歌曲下載仍無法使用。變更後請重新啟動 Spotify。";
+local_playlist_download_setting_hint = "此播放清單按鈕僅透過 Wi-Fi 同步本機檔案。你可以在 EeveeSpotify 設定 → 雜項設定 → 顯示播放清單下載按鈕 中將其隱藏。";
 
 //
 

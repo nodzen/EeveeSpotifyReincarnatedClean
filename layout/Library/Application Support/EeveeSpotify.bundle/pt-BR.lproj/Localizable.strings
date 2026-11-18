@@ -98,3 +98,6 @@ unknown_error = "Erro desconhecido";
 
 song_is_instrumental = "Esse som é instrumental.";
 let_the_music_play = "Deixe a música tocar...";
+local_playlist_download_button = "Mostrar botão de download de playlists";
+local_playlist_download_button_description = "O botão de download de playlists sincroniza apenas arquivos locais por Wi-Fi. O download de músicas no servidor continua indisponível. Reinicie o Spotify após alterar.";
+local_playlist_download_setting_hint = "Este botão de playlist sincroniza apenas arquivos locais por Wi-Fi. Você pode ocultá-lo nas Configurações do EeveeSpotify → Miscellaneous → Mostrar botão de download de playlists.";

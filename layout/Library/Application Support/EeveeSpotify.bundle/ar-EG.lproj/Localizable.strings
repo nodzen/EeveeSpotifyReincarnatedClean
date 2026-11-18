@@ -99,6 +99,9 @@ have_premium_popup = "يبدو أن لديك اشتراك Premium نشط، لذ�
 high_audio_quality_popup = "جودة الصوت العالية جدًا من جانب الخادم وغير متوفرة مع هذا التعديل.";
 playlist_downloading_popup = "تنزيل قائمة التشغيل الأصلية من جانب الخادم وغير متاح مع هذا التعديل. ومع ذلك يمكنك تنزيل حلقات البودكاست وقوائم التشغيل المحلية.";
 download_local_playlist = "تنزيل قائمة التشغيل المحلية";
+local_playlist_download_button = "إظهار زر تنزيل قوائم التشغيل";
+local_playlist_download_button_description = "زر تنزيل قوائم التشغيل يزامن الملفات المحلية عبر Wi-Fi فقط. يظل تنزيل الأغاني من جهة الخادم غير متاح. أعد تشغيل Spotify بعد التغيير.";
+local_playlist_download_setting_hint = "زر قائمة التشغيل هذا يزامن الملفات المحلية عبر Wi-Fi فقط. يمكنك إخفاؤه من إعدادات EeveeSpotify ← Miscellaneous ← إظهار زر تنزيل قوائم التشغيل.";
 
 //
 

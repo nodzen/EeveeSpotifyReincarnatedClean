@@ -96,19 +96,22 @@ livecontainer_sharing_description = "در صورتی که مقصد انتخاب�
 
 /* MARK: Premium PopUps */
 
-have_premium_popup = "به نظر می‌رسد شما یک اشتراک Premium فعال دارید، بنابراین این توییک داده‌ها را اصلاح نمی‌کند یا استفاده از ویژگی‌های سمت سرور Premium را محدود نمی‌کند. شما می توانید این را در تنظیمات EeveeSpotify مدیریت کنید.";
+have_premium_popup = "به نظر می‌رسد شما یک اشتراک Premium فعال دارید، بنابراین این توییک داده‌ها را تغییر نمی‌دهد یا استفاده از قابلیت‌های سمت سرور Premium را محدود نمی‌کند. می‌توانید این مورد را در تنظیمات EeveeSpotify مدیریت کنید.";
 
-high_audio_quality_popup = "کیفیت صدای بسیار بالا سمت سرور است و با این توییک در دسترس نیست.";
-playlist_downloading_popup = "دانلود لیست پخش بومی به صورت سرور است و با این توییک در دسترس نیست. هر چند می توانید قسمت های پادکست را دانلود کنید.";
-download_local_playlist = "بارگیری لیست پخش محلی";
+high_audio_quality_popup = "کیفیت صدای بسیار بالا (Very High) سمت سرور است و با این توییک در دسترس نیست.";
+playlist_downloading_popup = "دانلود بومی پلی‌لیست‌ها سمت سرور است و با این توییک امکان‌پذیر نیست. با این حال می‌توانید قسمت‌های پادکست را دانلود کنید.";
+download_local_playlist = "دانلود پلی‌لیست محلی";
+local_playlist_download_button = "نمایش دکمهٔ دانلود پلی‌لیست";
+local_playlist_download_button_description = "دکمهٔ دانلود پلی‌لیست فقط فایل‌های محلی را از طریق Wi-Fi همگام می‌کند. دانلود آهنگ از سمت سرور همچنان در دسترس نیست. پس از تغییر، Spotify را دوباره راه‌اندازی کنید.";
+local_playlist_download_setting_hint = "این دکمهٔ پلی‌لیست فقط فایل‌های محلی را از طریق Wi-Fi همگام می‌کند. می‌توانید آن را در تنظیمات EeveeSpotify ← متفرقه ← نمایش دکمهٔ دانلود پلی‌لیست پنهان کنید.";
 
 /* MARK: Lyrics */
 
 fallback_attribute = "بازگشتی";
-romanized_attribute = "عاشقانه";
+romanized_attribute = "نویسه‌گردانی به لاتین";
 
-musixmatch_unauthorized_popup = "این توییک به دلیل خطای غیرمجاز قادر به بارگیری اشعار از Musixmatch نیست. لطفاً توکن Musixmatch خود را بررسی یا به‌روزرسانی کنید. اگر از iPad استفاده می کنید، باید توکن را از برنامه Musixmatch برای iPad دریافت کنید.";
-musixmatch_restricted_popup = "این توییک قادر به بارگیری اشعار از Musixmatch نیست زیرا آنها محدود هستند. این احتمالاً به دلیل آدرس IP ایالات متحده یک مشکل حق چاپ است، بنابراین اگر در ایالات متحده هستید یا از VPN استفاده می کنید باید آن را تغییر دهید.";
+musixmatch_unauthorized_popup = "این توییک به دلیل خطای عدم احراز هویت قادر به دریافت متن آهنگ از Musixmatch نیست. لطفاً توکن Musixmatch خود را بررسی یا به‌روزرسانی کنید. اگر از آی‌پد استفاده می‌کنید، باید توکن را از برنامه Musixmatch برای آی‌پد دریافت کنید.";
+musixmatch_restricted_popup = "این توییک قادر به دریافت متن آهنگ از Musixmatch نیست زیرا دسترسی به آن‌ها محدود شده است. این احتمالاً یک مشکل حق نشر مربوط به نشانی IP ایالات متحده است، بنابراین اگر در ایالات متحده هستید یا از VPN استفاده می‌کنید آن را تغییر دهید.";
 
 // Errors Titles
 
@@ -150,9 +153,9 @@ export_debug_log = "خروجی گرفتن از گزارش اشکال‌زدای�
 clear_debug_log = "پاک کردن گزارش اشکال‌زدایی";
 debug_log_cleared = "گزارش اشکال‌زدایی پاک شد.";
 debug_log_cleared_ok = "باشه";
-no_debug_log_found = "هیچ گزارش اشکال‌زدایی یافت نشد. ثبت گزارش از زمان اجرای برنامه آغاز می‌شود.";
+no_debug_log_found = "گزارش اشکال‌زدایی پیدا نشد. گزارش‌گیری زمانی شروع می‌شود که گزینه گزارش اشکال‌زدایی فعال باشد.";
 no_debug_log_found_ok = "باشه";
-debug_section_footer = "گزارش اشکال‌زدایی را صادر یا پاک کنید.";
+debug_section_footer = "گزارش‌گیری را روشن کنید، سپس گزارش را صادر یا پاک کنید.";
 
 // Full reset
 resetButtonTitle = "بازنشانی کامل";
@@ -247,7 +250,7 @@ resetButtonTrackLog = "بازنشانی…";
 
 // SponsorBlock Reset Options Advanced
 resetTitle = "چه چیزی بازنشانی شود؟";
-resetSubtitle = "هر مورد مستقل از دیگری است.";
+resetSubtitle = "اطلاعات Keychain اسپاتیفای، پوشه‌های Sandbox و کانتینرهای App Group را پاک می‌کند. ورود مجدد را اجباری می‌کند. پس از اتمام، برنامه بسته می‌شود.";
 allResetSB = "همه موارد (تمام گزینه‌های بالا)";
 regenerateIDSB = "ایجاد مجدد شناسه کاربری";
 localSubmissionsSB = "ارسال‌های محلی من (%@)";
@@ -286,3 +289,12 @@ managingSegmentsSectionDeps2 = "در مسیر تنظیمات ← «گزارش‌
 categoriesTitle = "دسته‌بندی‌ها";
 categoriesSectionTitle1 = "عملکرد هر دسته‌بندی";
 categoriesSectionDeps1 = "خاموش = نادیده گرفتن. نمایش = فقط روی نوار نمایش داده شود. دستی = قبل از رد کردن سؤال شود. خودکار = بدون نمایش پیام به‌صورت خودکار رد شود.";
+karaoke_word_synced_button = "نمای سفارشی متن آهنگ";
+miscellaneous = "متفرقه";
+clean_share_links = "پاکسازی لینک‌های اشتراک‌گذاری";
+clean_share_links_description = "پارامترهای ردیابی را از لینک‌های اشتراک‌گذاری‌شده حذف می‌کند.";
+could_not_share_popup = "اشتراک‌گذاری در مقصد انتخاب‌شده یا LiveContainer انجام نشد. نشانی اینترنتی کپی شد.";
+block_rating_prompts = "مسدود کردن درخواست امتیازدهی";
+karaoke_alignment = "تراز متن آهنگ";
+karaoke_alignment_center = "وسط";
+karaoke_reversed_direction = "جهت معکوس";

@@ -82,6 +82,9 @@ have_premium_popup = "Se pare că aveți un abonament Premium activ, astfel înc
 high_audio_quality_popup = "Calitatea audio foarte ridicată este orientată către server și nu este disponibilă cu acest tweak.";
 playlist_downloading_popup = "Descărcarea nativă a listei de redare se face de pe server și nu este disponibilă cu acest tweak. Totuși, puteți descărca episoade podcast și liste de redare locale.";
 download_local_playlist = "Descărcați lista de redare locală";
+local_playlist_download_button = "Afișează butonul de descărcare a listelor";
+local_playlist_download_button_description = "Butonul de descărcare a listelor sincronizează doar fișiere locale prin Wi-Fi. Descărcarea melodiilor pe partea de server rămâne indisponibilă. Repornește Spotify după modificare.";
+local_playlist_download_setting_hint = "Acest buton de listă sincronizează doar fișiere locale prin Wi-Fi. Îl poți ascunde în Setările EeveeSpotify → Miscellaneous → Afișează butonul de descărcare a listelor.";
 
 /* MARK: Lyrics */
 

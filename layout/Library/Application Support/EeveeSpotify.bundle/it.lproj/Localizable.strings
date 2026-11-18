@@ -96,6 +96,9 @@ have_premium_popup = "Sembra che tu abbia un abbonamento Premium attivo, il twea
 high_audio_quality_popup = "La qualità audio molto alta viene gestita lato server e non è disponibile con questo tweak.";
 playlist_downloading_popup = "Il download delle playlist viene gestito lato server e non è disponibile con questo tweak. Puoi comunque scaricare i podcast e le playlist locali.";
 download_local_playlist = "Scarica playlist locale";
+local_playlist_download_button = "Mostra pulsante di download della playlist";
+local_playlist_download_button_description = "Il pulsante di download della playlist sincronizza solo i file locali via Wi-Fi. Il download dei brani lato server resta non disponibile. Riavvia Spotify dopo la modifica.";
+local_playlist_download_setting_hint = "Questo pulsante della playlist sincronizza solo i file locali via Wi-Fi. Puoi nasconderlo nelle Impostazioni di EeveeSpotify → Miscellaneous → Mostra pulsante di download della playlist.";
 
 //
 

@@ -94,6 +94,9 @@ have_premium_popup = "Det ser ud til at du har et aktivt Premium-abonnement, der
 high_audio_quality_popup = "Lydkvaliteten \"Meget høj\" er server-side og er derfor ikke tilgænglig med dette tweak.";
 playlist_downloading_popup = "Den indbyggede download af playlister er server-side og er ikke derfor tilgænglig med dette tweak. Download af podcastepisoder og lokale spillelister er dog muligt.";
 download_local_playlist = "Download lokal spilleliste";
+local_playlist_download_button = "Vis playliste-downloadknap";
+local_playlist_download_button_description = "Playliste-downloadknappen synkroniserer kun lokale filer over Wi-Fi. Serverbaseret download af numre er stadig ikke tilgængelig. Genstart Spotify efter ændring.";
+local_playlist_download_setting_hint = "Denne playlisteknap synkroniserer kun lokale filer over Wi-Fi. Du kan skjule den i EeveeSpotify-indstillinger → Miscellaneous → Vis playliste-downloadknap.";
 
 //
 

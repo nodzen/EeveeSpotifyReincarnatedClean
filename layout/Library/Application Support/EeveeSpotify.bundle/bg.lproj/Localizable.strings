@@ -99,3 +99,6 @@ unknown_error = "Неизвестна грешка";
 
 song_is_instrumental = "Тази песен е инструментална.";
 let_the_music_play = "Нека музиката звучи...";
+local_playlist_download_button = "Показване на бутона за изтегляне на плейлисти";
+local_playlist_download_button_description = "Бутонът за изтегляне на плейлисти синхронизира само локални файлове чрез Wi-Fi. Изтеглянето на песни от сървъра остава недостъпно. Рестартирайте Spotify след промяната.";
+local_playlist_download_setting_hint = "Този бутон за плейлист синхронизира само локални файлове чрез Wi-Fi. Може да го скриете в настройките на EeveeSpotify → Miscellaneous → Показване на бутона за изтегляне на плейлисти.";

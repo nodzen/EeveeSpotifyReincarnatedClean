@@ -94,6 +94,9 @@ have_premium_popup = "Sembla que tens una subscripció Premium activa, l'EeveeSp
 high_audio_quality_popup = "La qualitat d'àudio molt alta depèn del servidor i no està disponible amb aquest paquet de modificacions.";
 playlist_downloading_popup = "La descàrrega nativa de llistes de reproducció depèn del servidor i no està disponible amb aquest paquet de modificacions. No obstant, pots descarregar episodis de podcasts i llistes de reproducció locals.";
 download_local_playlist = "Descarrega la llista de reproducció local";
+local_playlist_download_button = "Mostra el botó de baixada de llistes";
+local_playlist_download_button_description = "El botó de baixada de llistes sincronitza només fitxers locals per Wi-Fi. Les baixades de cançons del servidor continuen indisponibles. Reinicieu l'Spotify després de canviar-ho.";
+local_playlist_download_setting_hint = "Aquest botó de llista sincronitza només fitxers locals per Wi-Fi. Podeu amagar-lo a Paràmetres d'EeveeSpotify → Miscellaneous → Mostra el botó de baixada de llistes.";
 
 //
 

@@ -94,6 +94,9 @@ have_premium_popup = "プレミアム会員のため、データを変更した�
 high_audio_quality_popup = "最高音質はサーバー側で管理されているため、利用できません。";
 playlist_downloading_popup = "プレイリストをダウンロードする機能はサーバー側で管理されているため、利用できません。ポッドキャストのエピソードや自分のローカルプレイリストはダウンロードできます。";
 download_local_playlist = "ローカルプレイリストをダウンロード";
+local_playlist_download_button = "プレイリストのダウンロードボタンを表示";
+local_playlist_download_button_description = "プレイリストのダウンロードボタンは、Wi-Fi経由でローカルファイルのみを同期します。サーバー側の楽曲ダウンロードは引き続き利用できません。変更後はSpotifyを再起動してください。";
+local_playlist_download_setting_hint = "このプレイリストボタンは、Wi-Fi経由でローカルファイルのみを同期します。EeveeSpotify設定 → その他 → プレイリストのダウンロードボタンを表示 で非表示にできます。";
 
 //
 

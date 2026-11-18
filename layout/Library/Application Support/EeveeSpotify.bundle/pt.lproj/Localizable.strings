@@ -82,6 +82,9 @@ have_premium_popup = "Parece que tem uma subscrição Premium ativa, por isso a 
 high_audio_quality_popup = "A qualidade de áudio muito alta é gerida pelo servidor e não está disponível com esta modificação.";
 playlist_downloading_popup = "O download nativo de listas de reprodução é gerido pelo servidor e não está disponível com esta modificação. Pode, no entanto, descarregar episódios de podcast e playlists locais.";
 download_local_playlist = "Descarregar Playlist Local";
+local_playlist_download_button = "Mostrar botão de descarregamento de listas";
+local_playlist_download_button_description = "O botão de descarregamento de listas sincroniza apenas ficheiros locais por Wi-Fi. A descarga de músicas do lado do servidor continua indisponível. Reinicie o Spotify depois de alterar.";
+local_playlist_download_setting_hint = "Este botão de lista sincroniza apenas ficheiros locais por Wi-Fi. Pode ocultá-lo nas Definições do EeveeSpotify → Miscellaneous → Mostrar botão de descarregamento de listas.";
 
 /* MARK: Lyrics */
 

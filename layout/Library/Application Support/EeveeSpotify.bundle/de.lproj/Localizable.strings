@@ -91,6 +91,9 @@ have_premium_popup = "Es sieht so aus, als ob du ein aktives Premium-Abonnement 
 high_audio_quality_popup = "Sehr hohe Audioqualität ist serverseitig und mit diesem Tweak nicht verfügbar.";
 playlist_downloading_popup = "Das Herunterladen von nativen Playlists ist serverseitig und nicht verfügbar. Podcast-Episoden und lokale Playlists können jedoch heruntergeladen werden.";
 download_local_playlist = "Lokale Playlist herunterladen";
+local_playlist_download_button = "Playlist-Download-Schaltfläche anzeigen";
+local_playlist_download_button_description = "Die Playlist-Download-Schaltfläche synchronisiert nur lokale Dateien über WLAN. Serverseitige Track-Downloads bleiben nicht verfügbar. Nach der Änderung Spotify neu starten.";
+local_playlist_download_setting_hint = "Diese Playlist-Schaltfläche synchronisiert nur lokale Dateien über WLAN. Du kannst sie unter EeveeSpotify-Einstellungen → Miscellaneous → Playlist-Download-Schaltfläche anzeigen ausblenden.";
 
 //
 

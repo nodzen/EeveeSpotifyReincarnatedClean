@@ -107,6 +107,9 @@ have_premium_popup = "Aktif bir Premium aboneliğiniz var gibi görünüyor, bu 
 high_audio_quality_popup = "Çok yüksek ses kalitesi sunucu taraflıdır ve bu tweak ile kullanılamaz.";
 playlist_downloading_popup = "Çalma listesi indirme sunucu taraflıdır ve bu tweak ile kullanılamaz. Ancak podcast bölümlerini ve yerel çalma listelerini indirebilirsiniz.";
 download_local_playlist = "Yerel çalma listesini indir";
+local_playlist_download_button = "Çalma listesi indirme düğmesini göster";
+local_playlist_download_button_description = "Çalma listesi indirme düğmesi yalnızca yerel dosyaları Wi-Fi üzerinden senkronize eder. Sunucu taraflı şarkı indirme kullanılamaz olmaya devam eder. Değiştirdikten sonra Spotify'ı yeniden başlatın.";
+local_playlist_download_setting_hint = "Bu çalma listesi düğmesi yalnızca Wi-Fi üzerinden yerel dosyaları senkronize eder. Bunu EeveeSpotify Ayarları → Çeşitli → Çalma listesi indirme düğmesini göster bölümünden gizleyebilirsiniz.";
 
 //
 

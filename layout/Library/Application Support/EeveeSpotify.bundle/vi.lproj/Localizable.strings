@@ -99,6 +99,9 @@ have_premium_popup = "Có vẻ như bạn có một đăng ký gói Premium đan
 high_audio_quality_popup = "Chất lượng âm thanh rất cao do phía máy chủ quản lý và không khả dụng với bản vá này.";
 playlist_downloading_popup = "Tính năng tải xuống danh sách phát gốc do phía máy chủ quản lý và không khả dụng với bản vá này. Tuy nhiên, bạn vẫn có thể tải xuống các tập podcast và danh sách phát cục bộ.";
 download_local_playlist = "Tải xuống danh sách phát cục bộ";
+local_playlist_download_button = "Hiện nút tải danh sách phát";
+local_playlist_download_button_description = "Nút tải danh sách phát chỉ đồng bộ các tệp cục bộ qua Wi-Fi. Tải bài hát từ máy chủ vẫn không khả dụng. Hãy khởi động lại Spotify sau khi thay đổi.";
+local_playlist_download_setting_hint = "Nút danh sách phát này chỉ đồng bộ các tệp cục bộ qua Wi-Fi. Bạn có thể ẩn nó trong Cài đặt EeveeSpotify → Miscellaneous → Hiện nút tải danh sách phát.";
 
 //
 

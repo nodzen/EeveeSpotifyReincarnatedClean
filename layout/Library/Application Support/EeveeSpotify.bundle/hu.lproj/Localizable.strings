@@ -82,6 +82,9 @@ have_premium_popup = "Úgy tűnik, hogy aktív Prémium előfizetésed van, így
 high_audio_quality_popup = "A nagyon magas hangminőség szerveroldali funkció, és ezzel a tweakkel nem érhető el.";
 playlist_downloading_popup = "A natív lejátszási lista letöltése szerveroldali funkció, és ezzel a tweakkel nem érhető el. Podcast epizódok és helyi lejátszási listák azonban letölthetők.";
 download_local_playlist = "Helyi lejátszási lista letöltése";
+local_playlist_download_button = "Lejátszólista-letöltés gomb megjelenítése";
+local_playlist_download_button_description = "A lejátszólista letöltés gombja csak a helyi fájlokat szinkronizálja Wi-Fi-n. A kiszolgáló oldali zeneletöltés továbbra sem érhető el. A módosítás után indítsd újra a Spotifyt.";
+local_playlist_download_setting_hint = "Ez a lejátszólistagomb csak a helyi fájlokat szinkronizálja Wi-Fi-n. Elrejtheted az EeveeSpotify beállítások → Miscellaneous → Lejátszólista-letöltés gomb megjelenítése menüben.";
 
 /* MARK: Lyrics */
 

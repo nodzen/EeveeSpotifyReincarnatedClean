@@ -94,6 +94,9 @@ have_premium_popup = "Tapai sanga Premium subscription chha jasto dekhincha, tes
 high_audio_quality_popup = "High audio quality server-sided ho ra yo tweak ma available chaina.";
 playlist_downloading_popup = "Native playlist download server-sided ho ra yo tweak ma upalabdha chainaa. Tara tapai podcast episode ra local playlist download garnu saknuhunchha.";
 download_local_playlist = "Local Playlist Download Garnuhos";
+local_playlist_download_button = "प्लेलिस्ट डाउनलोड बटन देखाउनुहोस्";
+local_playlist_download_button_description = "प्लेलिस्ट डाउनलोड बटनले Wi-Fi मार्फत स्थानीय फाइलहरू मात्र सिन्क गर्छ। सर्भरतर्फबाट गीत डाउनलोड गर्ने सुविधा अझै उपलब्ध छैन। परिवर्तनपछि Spotify पुन: सुरु गर्नुहोस्।";
+local_playlist_download_setting_hint = "यो प्लेलिस्ट बटनले Wi-Fi मार्फत स्थानीय फाइलहरू मात्र सिन्क गर्छ। तपाईं यसलाई EeveeSpotify सेटिङहरू ← Miscellaneous ← प्लेलिस्ट डाउनलोड बटन देखाउनुहोस् मा लुकाउन सक्नुहुन्छ।";
 
 //
 

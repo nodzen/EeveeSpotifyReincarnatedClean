@@ -69,6 +69,9 @@ have_premium_popup = "Sizdə aktiv Premium abunəlik aşkarlandı, buna görə d
 high_audio_quality_popup = "Çox yüksək səs keyfiyyəti server tərəfində idarə olunur və bu yamaqla dəstəklənmir.";
 playlist_downloading_popup = "Orijinal pleylist yükləmələri server tərəfindən idarə olunur və bu yamaqla işləməyəcək. Lakin podkast epizodları və yerli pleylistləri yükləmək mümkündür.";
 download_local_playlist = "Yerli pleylisti yüklə";
+local_playlist_download_button = "Pleylist yükləmə düyməsini göstər";
+local_playlist_download_button_description = "Pleylist yükləmə düyməsi yalnız yerli faylları Wi-Fi üzərindən sinxronlaşdırır. Server tərəfli mahnı yükləmə əlçatmaz olaraq qalır. Dəyişiklikdən sonra Spotify-ı yenidən başladın.";
+local_playlist_download_setting_hint = "Bu pleylist düyməsi yalnız yerli faylları Wi-Fi üzərindən sinxronlaşdırır. Onu EeveeSpotify Tənzimləmələri → Miscellaneous → Pleylist yükləmə düyməsini göstər bölməsində gizlədə bilərsiniz.";
 
 /* MARK: Lyrics */
 

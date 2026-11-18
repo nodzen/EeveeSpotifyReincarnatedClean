@@ -100,3 +100,6 @@ unknown_error = "Unbekannte Error";
 
 song_is_instrumental = "Das Lied isch instrumental";
 let_the_music_play = "Lass d'Musig spiele...";
+local_playlist_download_button = "Playlist-Download-Schaltfläche anzeigen";
+local_playlist_download_button_description = "Die Playlist-Download-Schaltfläche synchronisiert nur lokale Dateien über WLAN. Serverseitige Track-Downloads bleiben nicht verfügbar. Nach der Änderung Spotify neu starten.";
+local_playlist_download_setting_hint = "Diese Playlist-Schaltfläche synchronisiert nur lokale Dateien über WLAN. Du kannst sie unter EeveeSpotify-Einstellungen → Miscellaneous → Playlist-Download-Schaltfläche anzeigen ausblenden.";

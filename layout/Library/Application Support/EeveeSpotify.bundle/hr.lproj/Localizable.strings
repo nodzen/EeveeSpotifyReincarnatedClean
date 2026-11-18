@@ -82,6 +82,9 @@ have_premium_popup = "Izgleda da imate aktivnu Premium pretplatu, pa tweak neće
 high_audio_quality_popup = "Vrlo visoka kvaliteta zvuka je na strani poslužitelja i nije dostupna s ovim tweakom.";
 playlist_downloading_popup = "Izvorno preuzimanje popisa za reprodukciju je na strani poslužitelja i nije dostupno s ovim tweakom. Ipak možete preuzeti epizode podcasta i lokalne popise za reprodukciju.";
 download_local_playlist = "Preuzmi lokalni popis za reprodukciju";
+local_playlist_download_button = "Prikaži gumb za preuzimanje popisa";
+local_playlist_download_button_description = "Gumb za preuzimanje popisa sinkronizira samo lokalne datoteke putem Wi-Fija. Preuzimanje pjesama sa strane poslužitelja i dalje nije dostupno. Ponovno pokrenite Spotify nakon promjene.";
+local_playlist_download_setting_hint = "Ovaj gumb popisa sinkronizira samo lokalne datoteke putem Wi-Fija. Možete ga sakriti u EeveeSpotify postavkama → Miscellaneous → Prikaži gumb za preuzimanje popisa.";
 
 /* MARK: Tekstovi */
 
