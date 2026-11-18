@@ -9,11 +9,8 @@ import ObjectiveC.runtime
 import Orion
 import UIKit
 
-struct AdOnAppOpenServiceGroup: HookGroup {}
 struct AdOnAppOpenViewGroup: HookGroup {}
 struct AdOnAppOpenFooterViewGroup: HookGroup {}
-struct AdsBaseSwiftServiceGroup: HookGroup {}
-struct EmbeddedPlaylistAdServiceGroup: HookGroup {}
 struct MarqueeServiceGroup: HookGroup {}
 struct PremiumUpsellHeaderViewGroup: HookGroup {}
 struct PremiumUpsellBannerElementGroup: HookGroup {}
@@ -30,20 +27,9 @@ private func promotionLog(_ message: String) {
     }
 }
 
-// App-open advertisements have their own service and are independent from
-// the regular in-stream ad service. This target exists in both 9.1.76 and
-// 9.1.80 and exposes the stable SPTService load entry point.
-class AdOnAppOpenServiceKill: ClassHook<NSObject> {
-    typealias Group = AdOnAppOpenServiceGroup
-    static let targetName =
-        "_TtC29AdsStandalone_AdOnAppOpenImpl22AdOnAppOpenServiceImpl"
-
-    func load() {
-        promotionLog("suppressed AdOnAppOpenServiceImpl.load")
-        return
-    }
-}
-
+// App-open advertisements have their own service (AdOnAppOpenServiceImpl,
+// hooked in EeveeAdBlockerExtended) and are independent from the regular
+// in-stream ad service. Their view-level fallbacks stay here.
 class AdOnAppOpenViewKill: ClassHook<UIViewController> {
     typealias Group = AdOnAppOpenViewGroup
     static let targetName =
@@ -72,33 +58,10 @@ class AdOnAppOpenFooterViewKill: ClassHook<UIView> {
     }
 }
 
-// This is the common Swift ads infrastructure used by several newer ad
-// surfaces. It is deliberately separate from SPTAdsProductState so the
-// premium/product-state code remains untouched.
-class AdsBaseSwiftServiceKill: ClassHook<NSObject> {
-    typealias Group = AdsBaseSwiftServiceGroup
-    static let targetName =
-        "_TtC28AdsPlatform_AdsBaseSwiftImpl23AdsBaseSwiftServiceImpl"
-
-    func load() {
-        promotionLog("suppressed AdsBaseSwiftServiceImpl.load")
-        return
-    }
-}
-
-// Embedded playlist cards are another ad-backed renderer. The service is
-// present in 9.1.76 and 9.1.80 and is separate from the NPV service already
-// covered by EeveeAdBlockerExtended.
-class EmbeddedPlaylistAdServiceKill: ClassHook<NSObject> {
-    typealias Group = EmbeddedPlaylistAdServiceGroup
-    static let targetName =
-        "_TtC32AdsEmbedded_EmbeddedPlaylistImpl27EmbeddedPlaylistServiceImpl"
-
-    func load() {
-        promotionLog("suppressed EmbeddedPlaylistServiceImpl.load")
-        return
-    }
-}
+// AdOnAppOpenServiceImpl, AdsBaseSwiftServiceImpl, EmbeddedPlaylistServiceImpl
+// and the other Swift ad services are hooked by EeveeAdBlockerExtended. This
+// file only retries their group activation for modules Spotify loads lazily,
+// after the extended blocker's one-shot activation has already run.
 
 // Marquee is Spotify's full-screen artist/brand promotion surface. Remote
 // configuration normally disables it, but killing its service also covers a
@@ -275,6 +238,9 @@ private func activateIfAvailable(
 }
 
 func activateModernPromotionBlockers() {
+    // Swift ad services hooked in EeveeAdBlockerExtended. Their groups are
+    // re-checked here because Spotify registers some modules lazily, after
+    // the extended blocker's one-shot activation has already run.
     let serviceTargets: [(String, String, () -> Void)] = [
         (
             AdOnAppOpenServiceKill.targetName,
@@ -287,9 +253,9 @@ func activateModernPromotionBlockers() {
             { if !AdsBaseSwiftServiceGroup.isActive { AdsBaseSwiftServiceGroup().activate() } }
         ),
         (
-            EmbeddedPlaylistAdServiceKill.targetName,
+            EmbeddedPlaylistServiceKill.targetName,
             "EmbeddedPlaylistServiceImpl",
-            { if !EmbeddedPlaylistAdServiceGroup.isActive { EmbeddedPlaylistAdServiceGroup().activate() } }
+            { if !EmbeddedPlaylistServiceGroup.isActive { EmbeddedPlaylistServiceGroup().activate() } }
         ),
         (
             MarqueeServiceKill.targetName,
@@ -369,7 +335,7 @@ func activateModernPromotionBlockers() {
     let allKnownGroupsActive =
         AdOnAppOpenServiceGroup.isActive &&
         AdsBaseSwiftServiceGroup.isActive &&
-        EmbeddedPlaylistAdServiceGroup.isActive &&
+        EmbeddedPlaylistServiceGroup.isActive &&
         MarqueeServiceGroup.isActive &&
         SpotifyBannerPresentationGroup.isActive
 

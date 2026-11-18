@@ -27,7 +27,7 @@ class SPTPlayerTrackV91LyricsAvailabilityHook: ClassHook<NSObject> {
 // 9.1.x; the isolated metadata-only hook above is the compatible subset.
 class SPTPlayerTrackHook: ClassHook<NSObject> {
     typealias Group = LyricsErrorHandlingGroup  // Not activated for 9.1.x
-    static let targetName = EeveeSpotify.hookTarget == .latest
+    static let targetName = EeveeSpotify.hookTarget == .v90
         ? "SPTPlayerTrackImplementation"
         : "SPTPlayerTrack"
 

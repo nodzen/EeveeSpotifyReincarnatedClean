@@ -70,4 +70,8 @@ compile_and_run lyrics-dto \
 compile_and_run hook-source-audit \
     Tests/HookSourceAudit/main.swift
 
+compile_and_run version-hook-target \
+    Sources/EeveeSpotify/Shared/Models/VersionHookTarget.swift \
+    Tests/VersionHookTarget/main.swift
+
 python3 Tests/ResolveConfigurationSnapshot/test.py

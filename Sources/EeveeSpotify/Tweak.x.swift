@@ -317,25 +317,14 @@ struct EeveeSpotify: Tweak {
     
     static var hookTarget: VersionHookTarget {
         let version = spotifyVersion
-        
+
         if EeveeDebug.enabled {
             NSLog("[EeveeSpotify] Detected Spotify version: \(version)")
         }
-        
-        // Version -> target mapping. Exact pins are the last builds for
-        // dropped iOS versions; the 9.1 family is matched by prefix;
-        // everything else falls into .latest (see VersionHookTarget).
-        switch version {
-        case "9.0.48":
-            return .lastAvailableiOS15
-        case "8.9.8":
-            return .lastAvailableiOS14
-        case _ where version.hasPrefix("9.1."):
-            // 9.1.x versions don't have offline content helper classes
-            return .v91
-        default:
-            return .latest
-        }
+
+        // Version -> target mapping, compared numerically so 9.2 and every
+        // later release take the 9.1 path (see VersionHookTarget).
+        return VersionHookTarget.forSpotifyVersion(version)
     }
     
     // MARK: - Non-fatal hook error handling
@@ -399,6 +388,10 @@ struct EeveeSpotify: Tweak {
         // patching / network interception. Keeps premium UI/state even if every
         // other Eevee path is disabled.
         activateEeveePremiumForce()
+
+        // Must run before Spotify issues its first attributes request, which it
+        // does within a second of launch (9.2+ only; no-op on 9.1.x).
+        activateNebulaAttributes()
 
         activateEeveeCrossfadeForce()
 
@@ -631,7 +624,7 @@ struct EeveeSpotify: Tweak {
             LyricsErrorHandlingGroup().activate()
             LegacyScrollCaptureGroup().activate()
             
-            if EeveeSpotify.hookTarget == .latest {
+            if EeveeSpotify.hookTarget == .v90 {
                 ModernLyricsGroup().activate()
             }
             else {
