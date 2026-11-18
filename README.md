@@ -137,9 +137,9 @@ See [How this fork differs](#how-this-fork-differs-from-upstream) for the full l
 Please refrain from opening issues about the following features, as they are server-sided and will **NEVER** work:
 
 - Very High audio quality
-- Native playlist downloading (you can download podcast episodes though)
+- Native track downloads (podcast episodes download natively, and the playlist download button syncs local files over Wi-Fi — toggle it in EeveeSpotify Settings → Miscellaneous)
 - Jam (hosting a Spotify Jam and joining it remotely requires Premium; only joining in-person works)
-- AI DJ/Playlist
+- AI DJ/Playlist (may work: the bundled premium configuration carries the DJ flags and the feed is not always tier-checked, but this depends on account/market and is not guaranteed)
 - Spotify Connect (When using Spotify Connect, the device will act as a remote control and stream directly to the connected device. This is a server-sided limitation and is beyond the control of EeveeSpotify, so it will behave as if you have a Free subscription while using this feature.)
 
 ## [Common Issues](common_issues.md)
