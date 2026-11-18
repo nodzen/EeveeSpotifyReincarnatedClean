@@ -136,13 +136,7 @@ func startRecorderTrackTimer() {
 // skipped the reminder hook entirely. Newer 9.1 builds expose the modern helper
 // again. Activate only that hook when its exact Objective-C entry point exists.
 func activateV91ServerSidedReminderIfAvailable() {
-    let className = ContentOffliningUIHelperImplementationModernHook.targetName
-    let selector = NSSelectorFromString(
-        "downloadToggledWithCurrentAvailability:addAction:removeAction:pageIdentifier:pageURI:interactionID:"
-    )
-
-    guard let cls = NSClassFromString(className),
-          class_getInstanceMethod(cls, selector) != nil else {
+    guard ContentOffliningUIHelperImplementationModernHook.isAvailable else {
         writeDebugLog("[INIT] Server-sided download reminder unavailable on this 9.1.x build")
         return
     }
@@ -410,6 +404,14 @@ struct EeveeSpotify: Tweak {
         // loaded lazily, so their blocker retries until the runtime exposes
         // the compatible classes/selectors.
         activateModernPromotionBlockers()
+
+        // Local playlist Wi-Fi download button: intercept the free-tier header
+        // action so local playlists can sync without Premium. Hidden entirely
+        // when the setting is off.
+        if UserDefaults.patchType.isPatching,
+           NSClassFromString(LocalPlaylistDownloadHeaderHook.targetName) != nil {
+            LocalPlaylistDownloadGroup().activate()
+        }
 
         // Block ClientMessagingPlatform marketing surfaces (9.1.84 win-back
         // fullscreen takeover and Home Premium banner) and their element views.

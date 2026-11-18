@@ -701,4 +701,12 @@ private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
             attributes.removeValue(forKey: name)
         }
     }
+
+    // Local playlist Wi-Fi sync needs the offline entitlement on; applied after
+    // the server-authoritative restore so it is not undone. Server answers to
+    // actual download requests are untouched by this.
+    if UserDefaults.patchType.isPatching && LocalPlaylistDownload.launchEnabled {
+        attributes["offline"] = AccountAttribute.with { $0.boolValue = true }
+        writeDebugLog("[LOCAL_SYNC] Applied offline account override")
+    }
 }

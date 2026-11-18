@@ -20,6 +20,7 @@ extension UserDefaults {
     private static let blockSpotifyAnalyticsKey = "blockSpotifyAnalytics"
     private static let debugLoggingEnabledKey = "debugLoggingEnabled"
     private static let blockRatingPromptsKey = "blockRatingPrompts"
+    private static let localPlaylistDownloadEnabledKey = "localPlaylistDownloadEnabled"
     private static let spicyShareSpotifyTokenKey = "spicyShareSpotifyToken"
     private static let uncensorCrossProviderKey = "uncensorCrossProvider"
 
@@ -156,6 +157,15 @@ extension UserDefaults {
         }
         set {
             container.set(newValue, forKey: blockRatingPromptsKey)
+        }
+    }
+
+    static var localPlaylistDownloadEnabled: Bool {
+        get {
+            container.object(forKey: localPlaylistDownloadEnabledKey) as? Bool ?? true
+        }
+        set {
+            container.set(newValue, forKey: localPlaylistDownloadEnabledKey)
         }
     }
 

@@ -4,6 +4,7 @@ import UIKit
 struct EeveeMiscellaneousSettingsView: View {
     @State var blockSpotifyAnalytics = UserDefaults.blockSpotifyAnalytics
     @State var blockRatingPrompts = UserDefaults.blockRatingPrompts
+    @State var localPlaylistDownload = UserDefaults.localPlaylistDownloadEnabled
 
     var body: some View {
         List {
@@ -29,6 +30,15 @@ struct EeveeMiscellaneousSettingsView: View {
                     "block_rating_prompts".localized,
                     isOn: $blockRatingPrompts
                 )
+            }
+
+            if UserDefaults.patchType.isPatching {
+                Section(footer: Text("local_playlist_download_button_description".localized)) {
+                    Toggle(
+                        "local_playlist_download_button".localized,
+                        isOn: $localPlaylistDownload
+                    )
+                }
             }
 
             Section(footer: Text("livecontainer_sharing_description".localized)) {
@@ -60,6 +70,9 @@ struct EeveeMiscellaneousSettingsView: View {
         }
         .onChange(of: blockRatingPrompts) { enabled in
             UserDefaults.blockRatingPrompts = enabled
+        }
+        .onChange(of: localPlaylistDownload) { enabled in
+            UserDefaults.localPlaylistDownloadEnabled = enabled
         }
     }
 }

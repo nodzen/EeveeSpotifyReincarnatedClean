@@ -1,4 +1,5 @@
 import Orion
+import ObjectiveC.runtime
 import UIKit
 
 private func showHighQualityPopUp() {
@@ -9,14 +10,91 @@ private func showHighQualityPopUp() {
 }
 
 private func showPlaylistDownloadingPopUp(_ isPlaylist: Bool, onSecondaryClick: (() -> Void)?) {
+    let message = "playlist_downloading_popup".localized
     PopUpHelper.showPopUp(
-        message: "playlist_downloading_popup".localized,
+        message: isPlaylist ? message + "\n\n" + "local_playlist_download_setting_hint".localized : message,
         buttonText: "OK".uiKitLocalized,
         secondButtonText: isPlaylist
             ? "download_local_playlist".localized
             : nil,
         onSecondaryClick: onSecondaryClick
     )
+}
+
+struct LocalPlaylistDownloadGroup: HookGroup {}
+
+enum LocalPlaylistDownload {
+    static let launchEnabled = UserDefaults.localPlaylistDownloadEnabled
+    private static let actionViewClass = NSClassFromString(
+        "_TtC35ListUXPlatform_FreeTierPlaylistImplP33_0FBF7F603415652909A2EEC13496CA7D10ActionView"
+    )
+
+    static func isDownloadButton(_ button: UIButton) -> Bool {
+        guard let actionViewClass else { return false }
+        var current: UIView? = button
+        var hasDownloadText = false
+        while let view = current {
+            hasDownloadText = hasDownloadText ||
+                view.accessibilityLabel?.caseInsensitiveCompare("Download") == .orderedSame ||
+                view.accessibilityHint?.range(of: "tap to download and make available offline", options: .caseInsensitive) != nil
+            if view.isKind(of: actionViewClass) { return hasDownloadText }
+            if view is UIStackView { return false }
+            current = view.superview
+        }
+        return false
+    }
+}
+
+// Deepest-first subview search; the Clean fork does not ship GlassKit's
+// eeveeFirst helper this used upstream.
+private func firstSubview<T: UIView>(of view: UIView, matching predicate: (T) -> Bool) -> T? {
+    for case let subview as T in view.subviews where predicate(subview) {
+        return subview
+    }
+    for subview in view.subviews {
+        if let found = firstSubview(of: subview, matching: predicate) {
+            return found
+        }
+    }
+    return nil
+}
+
+// Hides the free-tier header download button when the setting is off. A warm
+// launch can still use Spotify's previously cached account configuration.
+class LocalPlaylistDownloadHeaderHook: ClassHook<UIViewController> {
+    typealias Group = LocalPlaylistDownloadGroup
+    static let targetName = "_TtC35ListUXPlatform_FreeTierPlaylistImpl17FTPViewController"
+
+    func viewDidLayoutSubviews() {
+        orig.viewDidLayoutSubviews()
+        guard !LocalPlaylistDownload.launchEnabled,
+              let root = target.viewIfLoaded,
+              let button = firstSubview(of: root, matching: LocalPlaylistDownload.isDownloadButton) else { return }
+        if !button.isHidden { button.isHidden = true }
+    }
+}
+
+class LocalPlaylistDownloadActionHook: ClassHook<UIButton> {
+    typealias Group = LocalPlaylistDownloadGroup
+
+    func sendAction(_ action: Selector, to recipient: Any?, forEvent event: UIEvent?) {
+        guard action == NSSelectorFromString("performAction"),
+              LocalPlaylistDownload.isDownloadButton(target) else {
+            orig.sendAction(action, to: recipient, forEvent: event)
+            return
+        }
+
+        guard LocalPlaylistDownload.launchEnabled else { return }
+        if LatestPremiumPatchingGroup.isActive || IOS14And15PremiumPatchingGroup.isActive {
+            orig.sendAction(action, to: recipient, forEvent: event)
+            return
+        }
+
+        showPlaylistDownloadingPopUp(true) {
+            guard self.target.window != nil else { return }
+            self.orig.sendAction(action, to: recipient, forEvent: nil)
+        }
+    }
 }
 
 //
@@ -84,6 +162,14 @@ class ContentOffliningUIHelperImplementationHook: ClassHook<NSObject> {
 class ContentOffliningUIHelperImplementationModernHook: ClassHook<NSObject> {
     typealias Group = LatestPremiumPatchingGroup
     static let targetName = "Offline_ContentOffliningUIImpl.ContentOffliningUIHelperImplementation"
+
+    static var isAvailable: Bool {
+        let selector = Selector((
+            "downloadToggledWithCurrentAvailability:addAction:removeAction:pageIdentifier:pageURI:interactionID:"
+        ))
+        guard let cls = NSClassFromString(targetName) else { return false }
+        return class_getInstanceMethod(cls, selector) != nil
+    }
     
     func downloadToggledWithCurrentAvailability(
         _ availability: NSInteger,
